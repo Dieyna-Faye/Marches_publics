@@ -1,0 +1,10 @@
+{
+  "name": "front-marche-public-wrapper",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npm --prefix front_marche_public-main run dev",
+    "build": "npm --prefix front_marche_public-main run build",
+    "preview": "npm --prefix front_marche_public-main run preview"
+  }
+}
+

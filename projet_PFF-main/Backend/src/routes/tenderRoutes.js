@@ -1,0 +1,43 @@
+const express = require('express');
+const router = express.Router();
+const ctrl = require('../controllers/tenderController');
+const bidCtrl = require('../controllers/bidController');
+const evalCtrl = require('../controllers/evaluationController');
+const fraudCtrl = require('../controllers/fraudController');
+const { validate } = require('../middleware/validate');
+const { tenderSchema, bidSchema, criteriaSchema } = require('../validators/schemas');
+const authenticate = require('../middleware/authenticate');
+const { requirePermission } = require('../middleware/authorize');
+const { upload } = require('../middleware/upload');
+const verifyPdfUpload = require('../middleware/verifyPdfUpload');
+
+// Appels d'offres
+router.get('/public', ctrl.listPublicTenders);
+router.get('/public/:id', ctrl.getPublicTender);
+router.get('/:id/documents/:documentId/download', ctrl.downloadTenderDocument);
+router.get('/', authenticate, requirePermission('tenders:view'), ctrl.listTenders);
+router.get('/published', authenticate, requirePermission('tenders:view'), ctrl.listPublishedTenders);
+router.post('/', authenticate, requirePermission('tenders:manage'), validate(tenderSchema), ctrl.createTender);
+router.get('/:id', authenticate, requirePermission('tenders:view'), ctrl.getTender);
+router.put('/:id', authenticate, requirePermission('tenders:manage'), validate(tenderSchema), ctrl.updateTender);
+router.post('/:id/submit-validation', authenticate, requirePermission('tenders:manage'), ctrl.submitForValidation);
+router.post('/:id/publish', authenticate, requirePermission('tenders:publish'), ctrl.publishTender);
+router.post('/:id/close', authenticate, requirePermission('tenders:manage'), ctrl.closeTender);
+router.post('/:id/open-bids', authenticate, ctrl.openBidsSession);
+router.post('/:id/cancel', authenticate, requirePermission('tenders:manage'), ctrl.cancelTender);
+router.post('/:id/archive', authenticate, requirePermission('tenders:manage'), ctrl.archiveTender);
+router.post('/:id/documents', authenticate, requirePermission('tenders:manage'), upload.single('file'), verifyPdfUpload, ctrl.addTenderDocument);
+
+// Soumissions pour un appel d'offres spécifique
+router.post('/:id/bids', authenticate, requirePermission('bids:submit'), validate(bidSchema), bidCtrl.createBid);
+router.get('/:id/bids', authenticate, requirePermission('bids:view'), bidCtrl.listBidsByTender);
+
+// Critères d'évaluation de l'appel d'offres
+router.post('/:id/criteria', authenticate, requirePermission('tenders:manage'), validate(criteriaSchema), evalCtrl.createCriteria);
+router.get('/:id/criteria', authenticate, requirePermission('tenders:view'), evalCtrl.listCriteria);
+
+// Scan de fraude pour cet appel d'offres
+router.post('/:id/fraud-scan', authenticate, requirePermission('alerts:manage'), fraudCtrl.runFraudDetection);
+
+// Chatbot IA d'assistance aux soumissionnaires pour cet appel d'offres
+module.exports = router;
