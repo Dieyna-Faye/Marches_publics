@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Badge, EmptyState, PageHeader, SectionCard } from '../components/ui'
 import { useApp } from '../context/useApp'
 import { tenderService } from '../services/tenderService'
-import { formatDate, toTenderView } from '../utils/formatters'
+import { displayReference, formatDate, toTenderView } from '../utils/formatters'
 
 export default function TenderDetailsPage({ publicView = false }) {
   const { id } = useParams()
@@ -87,11 +87,11 @@ export default function TenderDetailsPage({ publicView = false }) {
   if (loading) return <div className="loading-state"><span className="spinner" /> Chargement de l’appel d’offres…</div>
   if (error || !tender) return <EmptyState icon={FileText} title="Appel d’offres indisponible" description={error || 'Ressource introuvable.'} action={publicView ? <Link className="btn btn--primary" to="/connexion">Se connecter</Link> : null} />
 
-  const canManage = role === 'admin' || role === 'authority'
-  const isAuthority = role === 'authority' || role === 'admin'
-  const isCommission = role === 'commission' || role === 'admin'
+  const canManage = role === 'authority'
+  const isAuthority = role === 'authority'
+  const isCommission = role === 'commission'
   const isClosed = tender.statut === 'CLOTURE' || (tender.statut === 'PUBLIE' && tender.submissionDeadline && new Date(tender.submissionDeadline) < new Date())
-  const canOpenBids = (isCommission || isAuthority || role === 'admin') && ['PUBLIE', 'CLOTURE'].includes(tender.statut)
+  const canOpenBids = isCommission && ['PUBLIE', 'CLOTURE'].includes(tender.statut)
 
   const actions = (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -120,7 +120,7 @@ export default function TenderDetailsPage({ publicView = false }) {
           🏛️ Tenir la séance d’ouverture des plis
         </button>
       )}
-      {['EN_EVALUATION', 'EN_ATTRIBUTION'].includes(tender.statut) && (
+      {role === 'commission' && ['EN_EVALUATION', 'EN_ATTRIBUTION'].includes(tender.statut) && (
         <Link className="btn btn--primary" to={`/app/analyse/${tender.id}`}>
           Consulter l’évaluation de la commission
         </Link>
@@ -135,7 +135,7 @@ export default function TenderDetailsPage({ publicView = false }) {
 
   const content = (
     <>
-      <PageHeader backTo={publicView ? '/appels-offres' : '/app/appels-offres'} eyebrow={`AO-${tender.id} · ${tender.type}`} title={tender.title} description={tender.authority} actions={actions} />
+      <PageHeader backTo={publicView ? '/appels-offres' : '/app/appels-offres'} eyebrow={`AO-${displayReference(tender.id)} · ${tender.type}`} title={tender.title} description={tender.authority} actions={actions} />
       <div className="detail-status"><Badge tone={tender.status === 'Publié' ? 'green' : tender.status === 'Brouillon' ? 'orange' : 'neutral'} dot>{tender.status}</Badge><span>Créé le {formatDate(tender.createdAt)}</span></div>
       <div className="detail-grid">
         <div className="detail-main">
@@ -154,7 +154,7 @@ export default function TenderDetailsPage({ publicView = false }) {
         <aside className="detail-sidebar">
           {role === 'supplier' && tender.statut === 'PUBLIE' && <div className="apply-card"><span className="apply-card__icon"><Send size={22} /></span><h3>Déposer une offre</h3><p>Renseignez le montant, le délai proposé et joignez vos documents PDF.</p><Link className="btn btn--danger btn--block btn--large" to={`/app/soumissions/nouvelle?appel=${tender.id}`}>Déposer une offre</Link></div>}
           {!role && <div className="apply-card"><span className="apply-card__icon"><Send size={22} /></span><h3>Accès authentifié</h3><p>Le backend exige une connexion pour consulter et candidater.</p><Link className="btn btn--primary btn--block" to="/connexion">Se connecter</Link></div>}
-          <SectionCard title="Référence"><div className="key-numbers"><span><b>AO-{tender.id}</b><small>{tender.type}</small></span><span><b>{tender.status}</b><small>Statut actuel</small></span></div></SectionCard>
+          <SectionCard title="Référence"><div className="key-numbers"><span><b>AO-{displayReference(tender.id)}</b><small>{tender.type}</small></span><span><b>{tender.status}</b><small>Statut actuel</small></span></div></SectionCard>
         </aside>
       </div>
     </>

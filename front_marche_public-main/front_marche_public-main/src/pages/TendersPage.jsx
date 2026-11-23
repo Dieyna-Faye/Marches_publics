@@ -8,7 +8,7 @@ import TenderCard from '../components/TenderCard'
 import { Badge, EmptyState, PageHeader, SearchFilter } from '../components/ui'
 import { useApp } from '../context/useApp'
 import { tenderService } from '../services/tenderService'
-import { formatMoney, toTenderView } from '../utils/formatters'
+import { displayReference, formatMoney, toTenderView } from '../utils/formatters'
 
 const statusOptions = [
   ['', 'Tous les statuts'],
@@ -84,7 +84,7 @@ export default function TendersPage({ publicView = false }) {
         ? <EmptyState icon={Megaphone} title="Aucun appel d’offres" description="Aucun résultat ne correspond aux critères sélectionnés." />
         : view === 'grid'
           ? <div className={`tender-grid ${publicView ? 'tender-grid--public' : ''}`}>{filtered.map((tender) => <TenderCard tender={tender} publicView={publicView} role={role} key={tender.id} />)}</div>
-          : <div className="table-card"><table><thead><tr><th>Référence & objet</th><th>Autorité</th><th>Budget</th><th>Échéance</th><th>Statut</th><th /></tr></thead><tbody>{filtered.map((tender) => <tr key={tender.id}><td><Link className="table-title" to={`${publicView ? '/appels-offres' : '/app/appels-offres'}/${tender.id}`}><b>{tender.title}</b><span>AO-{tender.id} · {tender.type}</span></Link></td><td>{tender.authority}</td><td><b>{tender.budget}</b></td><td>{tender.deadline}</td><td><Badge tone={tender.status === 'Publié' ? 'green' : tender.status === 'Brouillon' ? 'orange' : 'neutral'} dot>{tender.status}</Badge></td><td><Link className="icon-button" to={`${publicView ? '/appels-offres' : '/app/appels-offres'}/${tender.id}`}>→</Link></td></tr>)}</tbody></table></div>
+          : <div className="table-card"><table><thead><tr><th>Référence & objet</th><th>Autorité</th><th>Budget</th><th>Échéance</th><th>Statut</th><th /></tr></thead><tbody>{filtered.map((tender) => <tr key={tender.id}><td><Link className="table-title" to={`${publicView ? '/appels-offres' : '/app/appels-offres'}/${tender.id}`}><b>{tender.title}</b><span>AO-{displayReference(tender.id)} · {tender.type}</span></Link></td><td>{tender.authority}</td><td><b>{tender.budget}</b></td><td>{tender.deadline}</td><td><Badge tone={tender.status === 'Publié' ? 'green' : tender.status === 'Brouillon' ? 'orange' : 'neutral'} dot>{tender.status}</Badge></td><td><Link className="icon-button" to={`${publicView ? '/appels-offres' : '/app/appels-offres'}/${tender.id}`}>→</Link></td></tr>)}</tbody></table></div>
 
   if (role === 'authority' && !publicView) return <AuthorityTenders rows={filtered} search={search} setSearch={setSearch} status={status} setStatus={setStatus} type={type} setType={setType} loading={loading} error={error} />
 
@@ -104,7 +104,7 @@ export default function TendersPage({ publicView = false }) {
 
   return (
     <>
-      <PageHeader eyebrow="MARCHÉS PUBLICS" title="Appels d’offres" description="Créez, publiez et suivez les procédures disponibles." actions={(role === 'admin' || role === 'authority') && <Link className="btn btn--primary" to="/app/appels-offres/nouveau"><Plus size={18} /> Nouvel appel d’offres</Link>} />
+      <PageHeader eyebrow="MARCHÉS PUBLICS" title="Appels d’offres" description={role === 'authority' ? 'Créez, publiez et suivez les procédures disponibles.' : 'Consultez les procédures disponibles en lecture seule.'} actions={role === 'authority' && <Link className="btn btn--primary" to="/app/appels-offres/nouveau"><Plus size={18} /> Nouvel appel d’offres</Link>} />
       <div className="list-toolbar">
         <SearchFilter value={search} onChange={setSearch} placeholder="Rechercher un appel d’offres…">
           <select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions.map(([value, label]) => <option value={value} key={label}>{label}</option>)}</select>

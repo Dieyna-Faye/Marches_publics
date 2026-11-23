@@ -30,7 +30,7 @@ export default function RegisterPage() {
   return <main className="auth-screen">
     <AuthVisual />
     <section className="auth-card-wrap"><div className="auth-card auth-card--register">
-      <header><h2>Bienvenue</h2><p>Inscrivez-vous pour avoir accès à votre espace utilisateur</p></header>
+      <header><h2>Créer un compte fournisseur</h2><p>Cette inscription crée un compte personnel fournisseur. Les comptes des autorités, commissions et auditeurs sont créés par l’administrateur.</p></header>
       <form onSubmit={submit}>
         <div className="auth-name-row"><label>Nom<div className="auth-input"><UserRound size={15}/><input autoComplete="family-name" onChange={set('nom')} placeholder="Votre nom" required value={form.nom}/></div></label><label>Prénom<div className="auth-input"><UserRound size={15}/><input autoComplete="given-name" onChange={set('prenom')} placeholder="Votre prénom" required value={form.prenom}/></div></label></div>
         <label>Adresse E-mail<div className="auth-input"><Mail size={15}/><input autoComplete="email" onChange={set('email')} placeholder="exemple@gmail.com" required type="email" value={form.email}/></div></label>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BarChart3, BrainCircuit, Building2, ChevronDown, FileSignature, Files, FileStack,
-  LayoutDashboard, LogOut, Menu, Megaphone, ScrollText, Search, Settings2, ShieldAlert, UsersRound, X,
+  LayoutDashboard, LogOut, Menu, Megaphone, PanelLeftClose, PanelLeftOpen, ScrollText, Search, Settings2, ShieldAlert, UsersRound, X,
 } from 'lucide-react'
 import Logo from './Logo'
 import { useApp } from '../context/useApp'
@@ -26,6 +26,7 @@ const navigation = [
 export default function AppLayout() {
   const { role, user, logout, toast } = useApp()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('marches-sidebar-collapsed') === 'true')
   const [profileOpen, setProfileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
@@ -40,6 +41,10 @@ export default function AppLayout() {
   }, [location.pathname])
 
   useEffect(() => {
+    localStorage.setItem('marches-sidebar-collapsed', String(sidebarCollapsed))
+  }, [sidebarCollapsed])
+
+  useEffect(() => {
     const close = (event) => {
       if (profileRef.current && !profileRef.current.contains(event.target)) setProfileOpen(false)
     }
@@ -48,16 +53,17 @@ export default function AppLayout() {
   }, [])
 
   return (
-    <div className={`app-shell ${usesDashboardShell ? 'app-shell--admin' : ''}`}>
+    <div className={`app-shell ${usesDashboardShell ? `app-shell--admin ${sidebarCollapsed ? 'app-shell--collapsed' : ''}` : ''}`}>
       <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}>
         <div className="sidebar__top">
-          <Logo compact={usesDashboardShell} light={false} />
+          <Logo compact={usesDashboardShell && sidebarCollapsed} light={false} />
+          {usesDashboardShell && <button className="sidebar__collapse" onClick={() => setSidebarCollapsed((value) => !value)} title={sidebarCollapsed ? 'Développer le menu' : 'Réduire le menu'} aria-label={sidebarCollapsed ? 'Développer le menu' : 'Réduire le menu'} aria-expanded={!sidebarCollapsed} type="button">{sidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}</button>}
           <button className="sidebar__close" onClick={() => setSidebarOpen(false)} type="button"><X size={22} /></button>
         </div>
         <nav className="sidebar__nav" aria-label="Navigation principale">
           <span className="sidebar__label">ESPACE DE TRAVAIL</span>
           {items.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => `sidebar__link ${isActive ? 'active' : ''}`}>
+            <NavLink key={to} to={to} end={end} title={sidebarCollapsed ? label : undefined} className={({ isActive }) => `sidebar__link ${isActive ? 'active' : ''}`}>
               <Icon size={19} /><span>{label}</span>
             </NavLink>
           ))}

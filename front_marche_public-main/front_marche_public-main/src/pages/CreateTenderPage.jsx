@@ -177,7 +177,7 @@ export default function CreateTenderPage() {
       <header className="authority-page-head">
         <div>
           <h1>{isEditing ? 'Modifier le Marché Public' : 'Nouveau Marché Public'}</h1>
-          <p>Configurez les paramètres de votre appel d’offres. Vous pourrez ensuite publier le DAO, ouvrir les plis scellés et évaluer les offres.</p>
+          <p>Configurez les paramètres de votre appel d’offres. Vous pourrez ensuite le publier, ouvrir les offres reçues et les évaluer.</p>
         </div>
         <div className="authority-page-head__actions">
           <button className="authority-btn authority-btn--ghost" disabled={loading} onClick={executeSave} type="button">

@@ -7,7 +7,7 @@ const fraudCtrl = require('../controllers/fraudController');
 const { validate } = require('../middleware/validate');
 const { tenderSchema, bidSchema, criteriaSchema } = require('../validators/schemas');
 const authenticate = require('../middleware/authenticate');
-const { requirePermission } = require('../middleware/authorize');
+const { authorize, requirePermission } = require('../middleware/authorize');
 const { upload } = require('../middleware/upload');
 const verifyPdfUpload = require('../middleware/verifyPdfUpload');
 
@@ -17,23 +17,23 @@ router.get('/public/:id', ctrl.getPublicTender);
 router.get('/:id/documents/:documentId/download', ctrl.downloadTenderDocument);
 router.get('/', authenticate, requirePermission('tenders:view'), ctrl.listTenders);
 router.get('/published', authenticate, requirePermission('tenders:view'), ctrl.listPublishedTenders);
-router.post('/', authenticate, requirePermission('tenders:manage'), validate(tenderSchema), ctrl.createTender);
+router.post('/', authenticate, authorize('authority'), validate(tenderSchema), ctrl.createTender);
 router.get('/:id', authenticate, requirePermission('tenders:view'), ctrl.getTender);
-router.put('/:id', authenticate, requirePermission('tenders:manage'), validate(tenderSchema), ctrl.updateTender);
-router.post('/:id/submit-validation', authenticate, requirePermission('tenders:manage'), ctrl.submitForValidation);
-router.post('/:id/publish', authenticate, requirePermission('tenders:publish'), ctrl.publishTender);
-router.post('/:id/close', authenticate, requirePermission('tenders:manage'), ctrl.closeTender);
-router.post('/:id/open-bids', authenticate, ctrl.openBidsSession);
-router.post('/:id/cancel', authenticate, requirePermission('tenders:manage'), ctrl.cancelTender);
-router.post('/:id/archive', authenticate, requirePermission('tenders:manage'), ctrl.archiveTender);
-router.post('/:id/documents', authenticate, requirePermission('tenders:manage'), upload.single('file'), verifyPdfUpload, ctrl.addTenderDocument);
+router.put('/:id', authenticate, authorize('authority'), validate(tenderSchema), ctrl.updateTender);
+router.post('/:id/submit-validation', authenticate, authorize('authority'), ctrl.submitForValidation);
+router.post('/:id/publish', authenticate, authorize('authority'), ctrl.publishTender);
+router.post('/:id/close', authenticate, authorize('authority'), ctrl.closeTender);
+router.post('/:id/open-bids', authenticate, authorize('commission'), ctrl.openBidsSession);
+router.post('/:id/cancel', authenticate, authorize('authority'), ctrl.cancelTender);
+router.post('/:id/archive', authenticate, authorize('authority'), ctrl.archiveTender);
+router.post('/:id/documents', authenticate, authorize('authority'), upload.single('file'), verifyPdfUpload, ctrl.addTenderDocument);
 
 // Soumissions pour un appel d'offres spécifique
 router.post('/:id/bids', authenticate, requirePermission('bids:submit'), validate(bidSchema), bidCtrl.createBid);
 router.get('/:id/bids', authenticate, requirePermission('bids:view'), bidCtrl.listBidsByTender);
 
 // Critères d'évaluation de l'appel d'offres
-router.post('/:id/criteria', authenticate, requirePermission('tenders:manage'), validate(criteriaSchema), evalCtrl.createCriteria);
+router.post('/:id/criteria', authenticate, authorize('authority'), validate(criteriaSchema), evalCtrl.createCriteria);
 router.get('/:id/criteria', authenticate, requirePermission('tenders:view'), evalCtrl.listCriteria);
 
 // Scan de fraude pour cet appel d'offres

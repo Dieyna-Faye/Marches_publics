@@ -47,7 +47,7 @@ export default function CreateUserPage() {
         <label>Confirmer le mot de passe<div><LockKeyhole size={15}/><input minLength="6" onChange={set('confirmation')} placeholder="••••••••" required type={showPassword?'text':'password'} value={form.confirmation}/></div></label>
       </div></section>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="admin-create-user__submit" disabled={saving} type="submit">{saving?<span className="spinner"/>:"Inviter l’utilisateur"}</button>
+      <button className="admin-create-user__submit" disabled={saving} type="submit">{saving?<span className="spinner"/>:"Créer le compte utilisateur"}</button>
     </form>
   </div>
 }

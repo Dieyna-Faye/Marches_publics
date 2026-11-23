@@ -23,10 +23,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/useApp'
 import { offerService } from '../services/offerService'
 import { tenderService } from '../services/tenderService'
-import { formatMoney, toTenderView } from '../utils/formatters'
+import { displayReference, formatMoney, toTenderView } from '../utils/formatters'
 
 const documentTypes = [
-  ['OFFRE_TECHNIQUE', 'Offre technique & Mémoire méthodologique'],
+  ['MEMOIRE_TECHNIQUE', 'Offre technique & mémoire méthodologique'],
   ['OFFRE_FINANCIERE', 'Offre financière détaillée (BPU / DQE)'],
   ['QUITUS_FISCAL', 'Quitus fiscal valide'],
   ['ATTESTATION_SOCIALE', 'Attestation sociale (IPRES / CSS)'],
@@ -36,11 +36,16 @@ const documentTypes = [
   ['AUTRE', 'Autre pièce justificative'],
 ]
 
+const requiredDocumentTypes = [
+  'REGISTRE_COMMERCE', 'QUITUS_FISCAL', 'ATTESTATION_SOCIALE',
+  'REFERENCES_TECHNIQUES', 'MEMOIRE_TECHNIQUE', 'PLANNING_EXECUTION', 'OFFRE_FINANCIERE',
+]
+
 const steps = [
   { id: 1, label: 'Création du projet', subtitle: 'Sélection du marché' },
   { id: 2, label: 'Documents', subtitle: 'Pièces administratives & techniques' },
   { id: 3, label: 'Évaluation financière', subtitle: 'Montant & Délais d’exécution' },
-  { id: 4, label: 'Détails finaux', subtitle: 'Récapitulatif & Scellement' },
+  { id: 4, label: 'Détails finaux', subtitle: 'Récapitulatif & Envoi' },
 ]
 
 export default function SubmissionFormPage() {
@@ -52,7 +57,13 @@ export default function SubmissionFormPage() {
   const [days, setDays] = useState('')
   const [technicalProposal, setTechnicalProposal] = useState('')
   const [documents, setDocuments] = useState({})
-  const [selectedCategory, setSelectedCategory] = useState('OFFRE_TECHNIQUE')
+  const [savedDocuments, setSavedDocuments] = useState([])
+  const [selectedCategory, setSelectedCategory] = useState('MEMOIRE_TECHNIQUE')
+  const [draftId, setDraftId] = useState('')
+  const [draftReference, setDraftReference] = useState('')
+  const [uploadedTypes, setUploadedTypes] = useState(() => new Set())
+  const [failedTypes, setFailedTypes] = useState(() => new Set())
+  const [isDragging, setIsDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const { showToast, user } = useApp()
@@ -84,32 +95,79 @@ export default function SubmissionFormPage() {
     }
   }, [searchParams])
 
+  useEffect(() => {
+    const draftToResume = searchParams.get('brouillon')
+    if (!draftToResume) return
+    let active = true
+    offerService.get(draftToResume)
+      .then(async (offer) => {
+        if (!active) return
+        if (offer.statut !== 'BROUILLON') throw new Error('Cette offre n’est plus un brouillon modifiable.')
+        setDraftId(offer.id)
+        setDraftReference(offer.reference || '')
+        setTenderId(String(offer.appelOffresId || ''))
+        setAmount(offer.montantPropose ?? '')
+        setDays(offer.delaiExecutionJours ?? '')
+        setTechnicalProposal(offer.technicalProposal || '')
+        setSavedDocuments(offer.documents || [])
+        setUploadedTypes(new Set((offer.documents || []).map((document) => document.type)))
+        setCurrentStep(2)
+        if (offer.appelOffresId) {
+          const tender = await tenderService.get(offer.appelOffresId)
+          if (!active) return
+          const viewed = toTenderView(tender)
+          setTenders((current) => current.some((item) => String(item.id) === String(viewed.id)) ? current : [viewed, ...current])
+        }
+      })
+      .catch((requestError) => { if (active) setError(requestError.message) })
+    return () => { active = false }
+  }, [searchParams])
+
   const selectedTender = useMemo(() => tenders.find((item) => item.id === String(tenderId)), [tenderId, tenders])
+  const tenderDeadlineLabel = selectedTender?.submissionDeadline || selectedTender?.dateLimiteSoumission
+    ? `${new Intl.DateTimeFormat('fr-SN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Dakar' }).format(new Date(selectedTender.submissionDeadline || selectedTender.dateLimiteSoumission))} (heure de Dakar, UTC)`
+    : '—'
   const uploadedEntries = Object.entries(documents).filter(([, file]) => file)
+  const attachedDocumentCount = savedDocuments.length + uploadedEntries.length
+  const preparedTypes = new Set([...uploadedTypes, ...uploadedEntries.map(([type]) => type)])
+  const missingRequiredTypes = requiredDocumentTypes.filter((type) => !preparedTypes.has(type))
 
   const addFiles = (fileList) => {
     const files = Array.from(fileList || [])
     if (!files.length) return
-    setDocuments((current) => {
-      const next = { ...current }
-      files.forEach((file, index) => {
-        // Détecter un type non encore pourvu ou prendre celui sélectionné
-        const type = files.length === 1
-          ? selectedCategory
-          : documentTypes.find(([candidate]) => !next[candidate])?.[0] || documentTypes[index % documentTypes.length][0]
-        next[type] = file
-      })
-      return next
-    })
-    showToast(`${files.length} document(s) ajouté(s).`)
+    if (files.length > 1) {
+      showToast('Ajoutez les pièces une par une afin de confirmer le type de chacune.', 'error')
+      return
+    }
+    const file = files[0]
+    if (!file.name.toLowerCase().endsWith('.pdf') || (file.type && file.type !== 'application/pdf')) {
+      showToast('Seuls les fichiers PDF sont acceptés.', 'error')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('La taille maximale autorisée est de 10 Mo par fichier.', 'error')
+      return
+    }
+    if (documents[selectedCategory] || uploadedTypes.has(selectedCategory)) {
+      showToast('Cette catégorie contient déjà une pièce. Retirez-la ou choisissez un autre type.', 'error')
+      return
+    }
+    setDocuments((current) => ({ ...current, [selectedCategory]: file }))
+    setFailedTypes((current) => { const next = new Set(current); next.delete(selectedCategory); return next })
+    showToast('Pièce ajoutée. Vérifiez son type avant de continuer.')
   }
 
   const removeDocument = (type) => {
+    if (uploadedTypes.has(type)) {
+      showToast('Cette pièce est déjà enregistrée dans le brouillon; elle ne peut plus être retirée ici.', 'error')
+      return
+    }
     setDocuments((current) => {
       const next = { ...current }
       delete next[type]
       return next
     })
+    setFailedTypes((current) => { const next = new Set(current); next.delete(type); return next })
   }
 
   // Navigation entre les étapes avec validation
@@ -124,8 +182,10 @@ export default function SubmissionFormPage() {
       setCurrentStep(2)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else if (currentStep === 2) {
-      if (uploadedEntries.length === 0) {
-        showToast('Attention : vous n’avez déposé aucun document. Vous pourrez en ajouter plus tard.', 'info')
+      if (missingRequiredTypes.length) {
+        const missingLabels = missingRequiredTypes.map((type) => documentTypes.find(([candidate]) => candidate === type)?.[1] || type)
+        setError(`Ajoutez les ${missingRequiredTypes.length} pièce(s) attendue(s) avant de continuer : ${missingLabels.join(', ')}.`)
+        return
       }
       setCurrentStep(3)
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -167,6 +227,11 @@ export default function SubmissionFormPage() {
       showToast('Veuillez d’abord choisir un appel d’offres.', 'error')
       return
     }
+    if (targetStep >= 3 && missingRequiredTypes.length) {
+      setError(`Complétez les pièces attendues à l’étape 2 (${missingRequiredTypes.length} manquante(s)).`)
+      setCurrentStep(2)
+      return
+    }
     if (targetStep >= 4 && (!amount || !days)) {
       showToast('Veuillez renseigner le montant et le délai d’exécution à l’étape 3.', 'error')
       setCurrentStep(3)
@@ -191,29 +256,41 @@ export default function SubmissionFormPage() {
       setCurrentStep(3)
       return
     }
+    if (missingRequiredTypes.length) {
+      setError(`Dépôt bloqué : ${missingRequiredTypes.length} pièce(s) attendue(s) manque(nt). Revenez à l’étape Documents.`)
+      setCurrentStep(2)
+      return
+    }
 
     setLoading(true)
     setError('')
     try {
-      const offer = await offerService.submit(tenderId, {
-        montantPropose: Number(amount),
-        delaiExecutionJours: Number(days),
-        technicalProposal: technicalProposal.trim(),
-      })
+      const offer = await offerService.saveDraft(tenderId, {
+          montantPropose: Number(amount),
+          delaiExecutionJours: Number(days),
+          technicalProposal: technicalProposal.trim(),
+        })
+      if (!draftId || String(offer.id) !== String(draftId)) {
+        setDraftId(offer.id)
+        setDraftReference(offer.reference || '')
+      }
 
       const entries = Object.entries(documents).filter(([, file]) => file)
-      if (entries.length > 0) {
-        const results = await Promise.allSettled(
-          entries.map(([type, file]) => offerService.uploadDocument(offer.id, type, file))
-        )
-        const failedCount = results.filter((result) => result.status === 'rejected').length
-        if (failedCount) {
-          throw new Error(`${failedCount} document(s) n’ont pas pu être ajoutés. Le brouillon est conservé.`)
-        }
+      const pendingEntries = entries.filter(([type]) => !uploadedTypes.has(type))
+      const results = await Promise.allSettled(
+        pendingEntries.map(([type, file]) => offerService.uploadDocument(offer.id, type, file))
+      )
+      const successfulTypes = pendingEntries.filter((_, index) => results[index].status === 'fulfilled').map(([type]) => type)
+      if (successfulTypes.length) setUploadedTypes((current) => new Set([...current, ...successfulTypes]))
+      const failures = pendingEntries.filter((_, index) => results[index].status === 'rejected')
+      setFailedTypes((current) => new Set([...current].filter((type) => !successfulTypes.includes(type)).concat(failures.map(([type]) => type))))
+      if (failures.length) {
+        const names = failures.map(([type]) => documentTypes.find(([candidate]) => candidate === type)?.[1] || type).join(', ')
+        throw new Error(`Échec pour ${names}. Votre brouillon ${offer.reference || displayReference(offer.id)} est conservé; relancez le dépôt pour réessayer uniquement ces pièces.`)
       }
 
       const submitted = await offerService.finalize(offer.id)
-      showToast(`Offre scellée et déposée avec succès ! Récépissé : ${submitted.accuseReception || 'SHA-256 enregistré'}`)
+      showToast(`Offre scellée et déposée avec succès ! Récépissé : ${displayReference(submitted.accuseReception || 'SHA-256 enregistré')}`)
       navigate('/app/soumissions')
     } catch (requestError) {
       console.error('Erreur soumission offre :', requestError)
@@ -240,11 +317,20 @@ export default function SubmissionFormPage() {
         delaiExecutionJours: days ? Number(days) : null,
         technicalProposal: technicalProposal.trim(),
       })
+      if (!draftId || String(offer.id) !== String(draftId)) {
+        setDraftId(offer.id)
+        setDraftReference(offer.reference || '')
+      }
       const entries = Object.entries(documents).filter(([, file]) => file)
-      if (entries.length > 0) {
-        await Promise.allSettled(
-          entries.map(([type, file]) => offerService.uploadDocument(offer.id, type, file))
-        )
+      const pendingEntries = entries.filter(([type]) => !uploadedTypes.has(type))
+      const results = await Promise.allSettled(pendingEntries.map(([type, file]) => offerService.uploadDocument(offer.id, type, file)))
+      const successfulTypes = pendingEntries.filter((_, index) => results[index].status === 'fulfilled').map(([type]) => type)
+      if (successfulTypes.length) setUploadedTypes((current) => new Set([...current, ...successfulTypes]))
+      const failures = pendingEntries.filter((_, index) => results[index].status === 'rejected')
+      setFailedTypes((current) => new Set([...current].filter((type) => !successfulTypes.includes(type)).concat(failures.map(([type]) => type))))
+      if (failures.length) {
+        const names = failures.map(([type]) => documentTypes.find(([candidate]) => candidate === type)?.[1] || type).join(', ')
+        throw new Error(`Échec d’enregistrement pour ${names}. Le brouillon ${offer.reference || displayReference(offer.id)} est conservé; vous pouvez réessayer sans doublon.`)
       }
       showToast('Votre offre a été enregistrée en brouillon. Vous pourrez la finaliser plus tard.')
       navigate('/app/soumissions')
@@ -261,7 +347,7 @@ export default function SubmissionFormPage() {
       <header className="authority-page-head">
         <div>
           <h1>Nouveau dépôt d’offre</h1>
-          <p>Préparez, déposez et scellez votre offre électronique sous pli protégé pour le marché sélectionné.</p>
+          <p>Préparez et envoyez votre offre pour le marché sélectionné. Vous pourrez suivre son traitement depuis votre espace.</p>
         </div>
       </header>
 
@@ -311,7 +397,7 @@ export default function SubmissionFormPage() {
         <main>
           {/* ===================== ÉTAPE 1 : CRÉATION DU PROJET & CHOIX DU MARCHÉ ===================== */}
           {currentStep === 1 && (
-            <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <section style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ background: '#fff', border: '1px solid #dbe5e9', borderRadius: '8px', padding: '24px' }}>
                 <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--navy)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Building2 size={20} color="#0284c7" />
@@ -342,7 +428,7 @@ export default function SubmissionFormPage() {
                     <option value="">-- Choisissez un marché public ouvert --</option>
                     {tenders.map((tender) => (
                       <option value={tender.id} key={tender.id}>
-                        AO-{tender.id} — {tender.title} ({tender.budget})
+                        AO-{displayReference(tender.id)} — {tender.title} ({tender.budget})
                       </option>
                     ))}
                   </select>
@@ -356,7 +442,7 @@ export default function SubmissionFormPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', fontSize: '12px' }}>
                       <div>
                         <span style={{ color: '#64748b', display: 'block' }}>Référence officielle</span>
-                        <b style={{ color: 'var(--navy)', fontSize: '13px' }}>AO-{selectedTender.id}</b>
+                        <b style={{ color: 'var(--navy)', fontSize: '13px' }}>AO-{displayReference(selectedTender.id)}</b>
                       </div>
                       <div>
                         <span style={{ color: '#64748b', display: 'block' }}>Autorité Contractante</span>
@@ -368,7 +454,7 @@ export default function SubmissionFormPage() {
                       </div>
                       <div>
                         <span style={{ color: '#64748b', display: 'block' }}>Date limite de dépôt</span>
-                        <b style={{ color: '#b91c1c', fontSize: '13px' }}>{selectedTender.deadline}</b>
+                        <b style={{ color: '#b91c1c', fontSize: '13px' }}>{tenderDeadlineLabel}</b>
                       </div>
                     </div>
                     {selectedTender.description && (
@@ -384,7 +470,7 @@ export default function SubmissionFormPage() {
                   <div style={{ fontSize: '13px' }}>
                     <b style={{ color: '#166534', display: 'block' }}>Candidat connecté : {user?.name || 'Fournisseur Agréé'}</b>
                     <span style={{ color: '#15803d' }}>
-                      Votre compte entreprise est certifié et habilité à déposer une offre sous pli électronique scellé.
+                      Votre compte entreprise est certifié et peut déposer une offre pour ce marché.
                     </span>
                   </div>
                 </div>
@@ -421,9 +507,24 @@ export default function SubmissionFormPage() {
                   <FileText size={20} color="#0284c7" />
                   Étape 2 : Dépôt des Pièces et Justificatifs
                 </h2>
-                <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>
-                  Téléchargez les pièces obligatoires de votre offre (mémoire technique, attestations administratives, quitus fiscal).
+                  <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>
+                  Déposez les pièces demandées dans le règlement de consultation. Confirmez le type de chaque PDF; la plateforme ne déduit pas son contenu du nom du fichier.
                 </p>
+
+                <div style={{ marginBottom: '20px', padding: '14px 16px', borderRadius: '8px', background: '#f7fafb', border: '1px solid #dbe5e9' }}>
+                  <b style={{ display: 'block', marginBottom: '9px', color: 'var(--navy)', fontSize: '13px' }}>Liste vérifiée par l’analyse de conformité</b>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '7px 14px' }}>
+                    {requiredDocumentTypes.map((type) => {
+                      const label = documentTypes.find(([candidate]) => candidate === type)?.[1] || type
+                      const uploaded = uploadedTypes.has(type)
+                      const selected = Boolean(documents[type])
+                      const retry = failedTypes.has(type)
+                      const status = uploaded ? '✓ Enregistré' : retry ? '! À réessayer' : selected ? '• Sélectionné' : '○ À joindre'
+                      return <span key={type} style={{ color: uploaded ? '#16734a' : retry ? '#b45309' : '#64748b', fontSize: '12px' }}>{status} · {label}</span>
+                    })}
+                  </div>
+                  <small style={{ display: 'block', marginTop: '9px', color: '#64748b', lineHeight: 1.5 }}>Cette liste indique les pièces actuellement vérifiées par la plateforme. Le règlement de consultation de l’appel reste la référence pour préparer votre offre.</small>
+                </div>
 
                 {/* Sélecteur de type avant upload */}
                 <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -439,15 +540,21 @@ export default function SubmissionFormPage() {
                   </select>
                 </div>
 
-                {/* Zone Drag & Drop */}
-                <label className="supplier-upload-zone" style={{ cursor: 'pointer', border: '2px dashed #93c5fd' }}>
+                {/* Zone de dépôt avec glisser-déposer réel */}
+                <label
+                  className="supplier-upload-zone"
+                  style={{ cursor: 'pointer', border: `2px dashed ${isDragging ? '#0284c7' : '#93c5fd'}`, background: isDragging ? '#eff6ff' : undefined }}
+                  onDragOver={(event) => { event.preventDefault(); setIsDragging(true) }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(event) => { event.preventDefault(); setIsDragging(false); addFiles(event.dataTransfer.files) }}
+                >
                   <span><UploadCloud size={28} /></span>
                   <b>Déposer un fichier pour : {documentTypes.find(([c]) => c === selectedCategory)?.[1]}</b>
-                  <p>Glissez et déposez vos fichiers PDF ou ZIP, ou cliquez pour parcourir vos dossiers.</p>
+                  <p>Glissez un PDF ici ou cliquez pour parcourir vos dossiers. Taille maximale : 10 Mo.</p>
                   <em>Sélectionner le fichier</em>
                   <input
                     type="file"
-                    accept="application/pdf,.zip"
+                    accept="application/pdf,.pdf"
                     onChange={(event) => addFiles(event.target.files)}
                   />
                 </label>
@@ -455,9 +562,9 @@ export default function SubmissionFormPage() {
                 {/* Liste des pièces déposées */}
                 <section className="supplier-document-list" style={{ marginTop: '24px' }}>
                   <header>
-                    <h2>Pièces enregistrées au dossier</h2>
+                    <h2>Pièces sélectionnées et enregistrées</h2>
                     <span style={{ fontSize: '12px', fontWeight: 700, color: '#0369a1' }}>
-                      {uploadedEntries.length} pièce(s) jointe(s)
+                      {attachedDocumentCount} pièce(s) jointe(s)
                     </span>
                   </header>
                   {uploadedEntries.map(([type, file]) => (
@@ -466,7 +573,7 @@ export default function SubmissionFormPage() {
                       <p>
                         <b style={{ fontSize: '13px', color: 'var(--navy)' }}>{file.name}</b>
                         <small style={{ fontSize: '11px', color: '#64748b' }}>
-                          Type : <strong>{documentTypes.find(([candidate]) => candidate === type)?.[1] || type}</strong> · {(file.size / 1024 / 1024).toFixed(2)} Mo
+                          Type : <strong>{documentTypes.find(([candidate]) => candidate === type)?.[1] || type}</strong> · {(file.size / 1024 / 1024).toFixed(2)} Mo · {uploadedTypes.has(type) ? 'Enregistré' : failedTypes.has(type) ? 'Échec — à réessayer' : 'Prêt à envoyer'}
                         </small>
                       </p>
                       <button
@@ -479,7 +586,13 @@ export default function SubmissionFormPage() {
                       </button>
                     </article>
                   ))}
-                  {uploadedEntries.length === 0 && (
+                  {savedDocuments.map((document) => (
+                    <article key={`saved-${document.id}`}>
+                      <span><FileCheck2 size={16} /></span>
+                      <p><b style={{ fontSize: '13px', color: 'var(--navy)' }}>{document.nomOriginal}</b><small style={{ fontSize: '11px', color: '#64748b' }}>Enregistré dans le brouillon · {documentTypes.find(([candidate]) => candidate === document.type)?.[1] || document.type}</small></p>
+                    </article>
+                  ))}
+                  {attachedDocumentCount === 0 && (
                     <p className="empty-copy" style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
                       Aucun document n’a encore été attaché. Vous pouvez en sélectionner un ci-dessus ou continuer.
                     </p>
@@ -666,10 +779,10 @@ export default function SubmissionFormPage() {
               <div style={{ background: '#fff', border: '1px solid #dbe5e9', borderRadius: '8px', padding: '24px' }}>
                 <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--navy)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <ShieldCheck size={22} color="#16a34a" />
-                  Étape 4 : Récapitulatif Final & Scellement Cryptographique
+                  Étape 4 : Vérification et envoi de l’offre
                 </h2>
                 <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>
-                  Vérifiez l’exactitude des informations avant le scellement définitif sous pli électronique inaltérable.
+                  Vérifiez les informations avant d’envoyer votre offre. Après l’envoi, son contenu restera confidentiel jusqu’à son ouverture par la commission.
                 </p>
 
                 {/* Tableau récapitulatif */}
@@ -680,7 +793,7 @@ export default function SubmissionFormPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', fontSize: '13px' }}>
                     <div>
                       <span style={{ color: '#64748b', display: 'block' }}>Marché Public</span>
-                      <b style={{ color: 'var(--navy)' }}>AO-{selectedTender?.id}</b>
+                      <b style={{ color: 'var(--navy)' }}>AO-{displayReference(selectedTender?.id)}</b>
                       <small style={{ display: 'block', color: '#475569' }}>{selectedTender?.title}</small>
                     </div>
                     <div>
@@ -693,16 +806,16 @@ export default function SubmissionFormPage() {
                     </div>
                     <div>
                       <span style={{ color: '#64748b', display: 'block' }}>Documents joints</span>
-                      <b style={{ color: '#16a34a', fontSize: '16px' }}>{uploadedEntries.length} pièce(s)</b>
+                      <b style={{ color: '#16a34a', fontSize: '16px' }}>{attachedDocumentCount} pièce(s)</b>
                     </div>
                   </div>
                 </div>
 
                 {/* Pièces jointes récap */}
-                {uploadedEntries.length > 0 && (
+                {attachedDocumentCount > 0 && (
                   <div style={{ marginBottom: '24px' }}>
                     <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--navy)', marginBottom: '10px' }}>
-                      Justificatifs joints au pli :
+                      Documents joints à l’offre :
                     </h4>
                     <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {uploadedEntries.map(([type, file]) => (
@@ -710,11 +823,12 @@ export default function SubmissionFormPage() {
                           <strong>{documentTypes.find(([c]) => c === type)?.[1] || type}</strong> : {file.name} ({(file.size / 1024 / 1024).toFixed(2)} Mo)
                         </li>
                       ))}
+                      {savedDocuments.map((document) => <li key={`summary-${document.id}`}><strong>{documentTypes.find(([type]) => type === document.type)?.[1] || document.type}</strong> : {document.nomOriginal} · déjà enregistré</li>)}
                     </ul>
                   </div>
                 )}
 
-                {/* Encadré Scellement Cryptographique et Confidentialité (Zero-Knowledge) */}
+                {/* Encadré de confidentialité de l’offre */}
                 <div style={{
                   padding: '20px',
                   background: 'linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%)',
@@ -726,13 +840,11 @@ export default function SubmissionFormPage() {
                     <LockKeyhole size={28} color="#0284c7" style={{ flexShrink: 0, marginTop: '2px' }} />
                     <div style={{ fontSize: '13px', color: '#1e3a8a' }}>
                       <b style={{ display: 'block', fontSize: '14px', marginBottom: '6px', color: '#1e40af' }}>
-                        🔒 Protection par Scellement Cryptographique (Zero-Knowledge)
+                        🔒 Confidentialité de votre offre
                       </b>
                       <p style={{ margin: 0, lineHeight: 1.6 }}>
-                        Conformément à la réglementation des marchés publics, votre pli sera <strong>strictement scellé et horodaté</strong>.
-                        Le montant financier et les offres techniques sont inaccessibles à l’autorité contractante et aux membres de la commission
-                        jusqu’à la <strong>séance officielle d’ouverture des plis</strong>.
-                        Un récépissé d’accusé de réception électronique avec <strong>empreinte SHA-256 infalsifiable</strong> vous sera délivré.
+                        Après l’envoi, votre offre est enregistrée avec sa date de dépôt. Son montant, ses documents et sa proposition technique restent confidentiels
+                        jusqu’à ce que la commission ouvre les offres. Un accusé de réception électronique vous sera délivré.
                       </p>
                     </div>
                   </div>
@@ -800,7 +912,7 @@ export default function SubmissionFormPage() {
               </div>
               <div>
                 <dt>Réf. de l’offre</dt>
-                <dd>{selectedTender ? `OFFRE-${selectedTender.id}` : '—'}</dd>
+                    <dd>{draftId ? displayReference(draftReference || 'Brouillon enregistré') : selectedTender ? 'Attribuée après enregistrement' : '—'}</dd>
               </div>
               <div>
                 <dt>Entreprise</dt>
@@ -812,7 +924,7 @@ export default function SubmissionFormPage() {
               </div>
               <div>
                 <dt>Échéance</dt>
-                <dd>{selectedTender?.deadline || '—'}</dd>
+                <dd>{tenderDeadlineLabel}</dd>
               </div>
               {amount && (
                 <div>
@@ -833,17 +945,17 @@ export default function SubmissionFormPage() {
               <span className={tenderId ? 'done' : ''}>
                 <i /> 1. Marché public sélectionné
               </span>
-              <span className={uploadedEntries.length ? 'done' : ''}>
-                <i /> 2. Documents joints ({uploadedEntries.length})
+              <span className={attachedDocumentCount ? 'done' : ''}>
+                <i /> 2. Documents joints ({attachedDocumentCount})
               </span>
               <span className={amount && days ? 'done' : ''}>
                 <i /> 3. Proposition financière & délais
               </span>
               <span className={currentStep === 4 && amount && days ? 'done' : ''}>
-                <i /> 4. Prêt pour scellement cryptographique
+                <i /> 4. Prêt à envoyer l’offre
               </span>
               <em>
-                {Math.max(0, 3 - [tenderId, amount && days, uploadedEntries.length].filter(Boolean).length)} étape(s) restante(s)
+                {Math.max(0, 3 - [tenderId, amount && days, attachedDocumentCount].filter(Boolean).length)} étape(s) restante(s)
               </em>
             </div>
 

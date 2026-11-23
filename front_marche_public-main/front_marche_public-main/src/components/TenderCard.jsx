@@ -1,6 +1,7 @@
 import { ArrowUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import tenderImage from '../assets/tender-handshake.png'
+import { displayReference } from '../utils/formatters'
 
 export default function TenderCard({ tender, publicView = false, role }) {
   const detailsTo = publicView ? `/appels-offres/${tender.id}` : `/app/appels-offres/${tender.id}`
@@ -10,19 +11,22 @@ export default function TenderCard({ tender, publicView = false, role }) {
   if (role === 'supplier' && tender.statut === 'PUBLIE') {
     primaryTo = `/app/soumissions/nouvelle?appel=${tender.id}`
     primaryLabel = 'Faire une soumission'
-  } else if (['admin', 'authority'].includes(role) && tender.statut === 'BROUILLON') {
+  } else if (role === 'authority' && tender.statut === 'BROUILLON') {
     primaryTo = `/app/appels-offres/${tender.id}/modifier`
     primaryLabel = 'Modifier le marché'
   } else if (role === 'authority') {
+    primaryTo = detailsTo
+    primaryLabel = 'Suivre la procédure'
+  } else if (role === 'commission' && ['PUBLIE', 'CLOTURE', 'EN_EVALUATION'].includes(tender.statut)) {
     primaryTo = `/app/analyse/${tender.id}`
-    primaryLabel = 'Analyser les offres'
+    primaryLabel = 'Évaluer les offres'
   }
 
   return <article className="dashboard-tender-card">
     <img src={tenderImage} alt="Réunion consacrée à un appel d’offres" />
     <div className="dashboard-tender-card__overlay" />
     <div className="dashboard-tender-card__body">
-      <small>AO-{tender.id} · {tender.authority}</small>
+      <small>AO-{displayReference(tender.id)} · {tender.authority}</small>
       <h2>{tender.title}</h2>
       <p>{tender.description}</p>
       <div className="dashboard-tender-card__meta"><span>{tender.deadline}</span><span>{tender.budget}</span><span>{tender.type}</span></div>

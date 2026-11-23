@@ -38,7 +38,7 @@ export default function LoginPage() {
       <form onSubmit={submit}>
         <label>Adresse E-mail<div className="auth-input"><Mail size={15}/><input autoComplete="email" onChange={(event)=>setEmail(event.target.value)} placeholder="exemple@gmail.com" required type="email" value={email}/></div></label>
         <label>Mot de passe<div className="auth-input"><LockKeyhole size={15}/><input autoComplete="current-password" minLength="6" onChange={(event)=>setPassword(event.target.value)} placeholder="••••••••" required type={showPassword?'text':'password'} value={password}/><button aria-label={showPassword?'Masquer le mot de passe':'Afficher le mot de passe'} onClick={()=>setShowPassword(!showPassword)} type="button">{showPassword?<EyeOff size={15}/>:<Eye size={15}/>}</button></div></label>
-        <div className="auth-between"><label><input type="checkbox"/> Se souvenir de moi</label><a href="#mot-de-passe-oublie">Mot de passe oublié ?</a></div>
+        <div className="auth-between"><span>Besoin d’aide pour vous connecter ?</span><a href="mailto:contact@procureai.sn?subject=Demande%20d’aide%20pour%20la%20connexion">Contacter le support</a></div>
         {error && <p className="auth-error" role="alert">{error}</p>}
         <button className="auth-submit" disabled={loading} type="submit">{loading?<span className="spinner"/>:'Se connecter'}</button>
       </form>

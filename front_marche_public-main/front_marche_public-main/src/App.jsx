@@ -52,7 +52,7 @@ export default function App() {
           <Route path="assistant" element={<AssistantPage />} />
         </Route>
       </Route>
-      <Route element={<ProtectedRoute roles={['admin', 'authority']} />}>
+      <Route element={<ProtectedRoute roles={['authority']} />}>
         <Route path="app/appels-offres/nouveau" element={<AppLayout />}>
           <Route index element={<CreateTenderPage />} />
         </Route>
@@ -90,7 +90,7 @@ export default function App() {
           <Route index element={<DocumentsPage />} />
         </Route>
       </Route>
-      <Route element={<ProtectedRoute roles={['admin', 'authority', 'auditor']} />}>
+      <Route element={<ProtectedRoute roles={['admin']} />}>
         <Route path="app/utilisateurs" element={<AppLayout />}>
           <Route index element={<UsersPage />} />
         </Route>

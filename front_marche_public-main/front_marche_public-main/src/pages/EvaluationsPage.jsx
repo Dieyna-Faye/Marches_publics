@@ -1,10 +1,10 @@
-import { AlertTriangle, Building2, CheckCircle2, Download, LockKeyhole, LockOpen, RotateCcw, ShieldAlert, Sparkles } from 'lucide-react'
+import { AlertTriangle, Building2, Download, LockKeyhole, LockOpen, RotateCcw, ShieldAlert, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useApp } from '../context/useApp'
 import { offerService } from '../services/offerService'
 import { tenderService } from '../services/tenderService'
-import { formatMoney } from '../utils/formatters'
+import { displayReference, formatMoney } from '../utils/formatters'
 
 export default function EvaluationsPage() {
   const { id } = useParams()
@@ -194,7 +194,7 @@ export default function EvaluationsPage() {
       <div className="authority-breadcrumb">
         <span>APPELS D’OFFRES</span>
         <b>/</b>
-        <strong>AO-{tender.id}</strong>
+        <strong>AO-{displayReference(tender.id)}</strong>
       </div>
       <header className="authority-page-head">
         <div>
@@ -202,18 +202,6 @@ export default function EvaluationsPage() {
           <p>Examen des pièces, comparaison indicative, grille technique et préparation de la décision de la commission.</p>
         </div>
         <div className="authority-page-head__actions">
-          {isSealed && offers.length > 0 && (
-            <button
-              className="authority-btn authority-btn--dark"
-              style={{ background: '#0284c7', borderColor: '#0284c7', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-              disabled={openingBids}
-              onClick={handleOpenBids}
-              type="button"
-            >
-              <LockOpen size={15} />
-              {openingBids ? 'Ouverture des plis…' : '🏛️ Tenir la séance d’ouverture des plis'}
-            </button>
-          )}
           {selected && !isSealed && (
             <Link className="authority-btn authority-btn--ghost" to={`/app/soumissions/${selected.id}`}>
               Ouvrir le dossier complet
@@ -237,106 +225,33 @@ export default function EvaluationsPage() {
         </p>
       )}
 
-      {/* Bannière Scellement Cryptographique & Tenue de la séance d'ouverture des plis */}
+      {/* État du coffre-fort et action requise avant l’analyse */}
       {isSealed && offers.length > 0 && (
-        <section
-          style={{
-            margin: '16px 0 24px',
-            padding: '24px',
-            background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-            border: '1px solid #7dd3fc',
-            borderRadius: '10px',
-            boxShadow: '0 2px 8px rgba(2, 132, 199, 0.08)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-            <div
-              style={{
-                background: '#0284c7',
-                color: '#fff',
-                borderRadius: '50%',
-                padding: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <LockKeyhole size={28} />
+        <section className="authority-sealed-notice">
+          <span className="authority-sealed-notice__icon"><LockKeyhole size={22} /></span>
+          <div className="authority-sealed-notice__content">
+            <div className="authority-sealed-notice__heading">
+              <h2>Les plis sont protégés</h2>
+              <span>{offers.length} offre{offers.length > 1 ? 's' : ''} · {tender.statut}</span>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0369a1' }}>
-                  🔒 Coffre-fort numérique : Plis scellés ({offers.length} offre(s) reçue(s))
-                </h3>
-                <span
-                  style={{
-                    background: '#0284c7',
-                    color: '#fff',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                  }}
-                >
-                  Statut : {tender.statut}
-                </span>
-              </div>
-              <p style={{ margin: '0 0 16px', fontSize: '13px', lineHeight: 1.6, color: '#0f172a' }}>
-                Conformément aux règles des marchés publics (principe de stricte confidentialité et non-divulgation avant la date limite),
-                les offres des soumissionnaires sont <strong>scellées et protégées sous empreinte cryptographique SHA-256</strong>.
-                Pour débuter l’instruction, la <strong>Commission d’Évaluation</strong> doit formaliser la séance d’ouverture des plis,
-                ce qui déverrouillera les offres, affichera les montants et documents réels, et génèrera le Procès-Verbal officiel d'ouverture (PV).
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                <button
-                  className="authority-btn authority-btn--dark"
-                  style={{
-                    background: '#0284c7',
-                    borderColor: '#0284c7',
-                    color: '#fff',
-                    padding: '10px 22px',
-                    fontSize: '14px',
-                    fontWeight: 700,
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                  disabled={openingBids}
-                  onClick={handleOpenBids}
-                  type="button"
-                >
-                  <Sparkles size={16} />
-                  {openingBids ? 'Ouverture et génération du PV officiel…' : '🏛️ Tenir la séance d’ouverture des plis'}
-                </button>
-                <span style={{ fontSize: '12px', color: '#475569' }}>
-                  Horodatage garanti · Procès-verbal d’ouverture traçable dans l’audit
-                </span>
-              </div>
-            </div>
+            <p>La commission doit tenir la séance d’ouverture avant de consulter les montants, les pièces et de commencer l’évaluation.</p>
+            <small>Ouverture horodatée · Procès-verbal conservé dans l’audit</small>
           </div>
+          <button className="authority-btn authority-btn--dark" disabled={openingBids} onClick={handleOpenBids} type="button">
+            <LockOpen size={15} />
+            {openingBids ? 'Ouverture en cours…' : 'Tenir la séance d’ouverture'}
+          </button>
         </section>
       )}
 
       {/* Aucune soumission déposée */}
       {offers.length === 0 ? (
-        <div
-          style={{
-            margin: '24px 0',
-            padding: '36px 20px',
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '10px',
-            textAlign: 'center',
-          }}
-        >
-          <Building2 size={40} color="#64748b" style={{ margin: '0 auto 12px' }} />
-          <h3 style={{ margin: '0 0 8px', fontSize: '17px', fontWeight: 800, color: 'var(--navy)' }}>
+        <div className="authority-analysis-empty">
+          <Building2 size={36} />
+          <h3>
             Aucune soumission déposée pour le moment
           </h3>
-          <p style={{ color: '#64748b', fontSize: '13px', maxWidth: '540px', margin: '0 auto 18px', lineHeight: 1.6 }}>
+          <p>
             Cet appel d’offres est actuellement au statut <strong>{tender.statut}</strong>.
             Les offres déposées et scellées par les candidats apparaîtront ici dès leur dépôt officiel.
           </p>
@@ -345,18 +260,27 @@ export default function EvaluationsPage() {
           </Link>
         </div>
       ) : (
+        <>
+        <label className="authority-analysis-selector">
+          <span><small>DOSSIER À EXAMINER</small><b>{offers.length} soumission{offers.length > 1 ? 's' : ''} reçue{offers.length > 1 ? 's' : ''}</b></span>
+          <select value={selected?.id || ''} onChange={(event) => setSelectedId(event.target.value)}>
+            {offers.map((offer) => (
+              <option key={offer.id} value={offer.id}>
+                {displayReference(offer.reference || offer.id)} · {offer.fournisseur?.nom || (offer.isSealed ? 'Offre non ouverte' : 'Fournisseur')}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <section className="authority-analysis-score-overview" aria-label="Résumé des scores de l’offre">
+          <article className="is-primary"><small>SCORE GLOBAL</small><strong>{isSealed || score?.global == null ? '—' : `${score.global}/100`}</strong><span>{isSealed ? 'Offre non ouverte' : score?.scoreComplete ? 'Tous les critères renseignés' : `Couverture : ${score?.scoreCoveragePercent ?? 0}%`}</span></article>
+          <article><small>ADMINISTRATIF</small><strong>{isSealed ? '—' : score?.adminScore == null ? 'À vérifier' : `${score.adminScore}%`}</strong><span>{isSealed ? 'Offre non ouverte' : score?.adminScore == null ? 'Vérifiez les pièces déposées' : 'Indice des pièces examinées'}</span></article>
+          <article><small>TECHNIQUE</small><strong>{isSealed ? '—' : score?.technicalScore == null ? 'À noter' : `${score.technicalScore}%`}</strong><span>{isSealed ? 'Offre non ouverte' : score?.technicalScore == null ? 'Enregistrez les notes des critères' : 'Moyenne des critères notés'}</span></article>
+          <article><small>FINANCIER</small><strong>{isSealed ? '—' : score?.financialScore == null ? 'Indisponible' : `${score.financialScore}%`}</strong><span>{isSealed ? 'Offre non ouverte' : score?.financialScore == null ? 'Montant ou budget manquant' : 'Comparaison avec le budget'}</span></article>
+        </section>
+
         <div className="authority-analysis-grid">
           <main>
-            <label className="authority-inline-status">
-              Soumission évaluée{' '}
-              <select value={selected?.id} onChange={(event) => setSelectedId(event.target.value)}>
-                {offers.map((offer) => (
-                  <option key={offer.id} value={offer.id}>
-                    {offer.reference} · {offer.fournisseur?.nom || (offer.isSealed ? 'Pli scellé' : 'Fournisseur')}
-                  </option>
-                ))}
-              </select>
-            </label>
 
             <section className="authority-strategy">
               <h2>
@@ -466,73 +390,9 @@ export default function EvaluationsPage() {
               {evaluations.length > 0 && <footer>{evaluations.length} note(s) enregistrée(s). Relancez ensuite l’analyse pour actualiser le score global.</footer>}
             </section>
 
-            <section className="authority-verification">
-              <header>
-                <h2>État réel de l’examen des pièces</h2>
-              </header>
-              {isSealed ? (
-                <p className="empty-copy">
-                  🔒 Les pièces justificatives sont protégées sous scellé cryptographique. Ouvrez les plis pour les examiner et les télécharger.
-                </p>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>DOCUMENT</th>
-                      <th>FICHIER</th>
-                      <th>STATUT DE REVUE</th>
-                      <th>OBSERVATION ENREGISTRÉE</th>
-                      <th>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {documents.map((document) => (
-                      <tr key={document.id}>
-                        <td>
-                          <b>{document.type?.replaceAll('_', ' ')}</b>
-                          <small>Document #{document.id}</small>
-                        </td>
-                        <td>{document.nomOriginal}</td>
-                        <td>
-                          <em>{document.reviewStatus?.replaceAll('_', ' ') || 'à vérifier'}</em>
-                        </td>
-                        <td>
-                          {document.reviewComment || 'Aucune revue motivée enregistrée.'}
-                          {document.reviewedAt && (
-                            <small>
-                              {' '}
-                              · {new Intl.DateTimeFormat('fr-SN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(document.reviewedAt))}
-                            </small>
-                          )}
-                        </td>
-                        <td>
-                          <button onClick={() => downloadDocument(document)} title="Télécharger" type="button">
-                            <Download size={13} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              {!isSealed && documents.length === 0 && <p className="empty-copy">Aucune pièce déposée.</p>}
-              <footer>
-                La détection de présence ne certifie ni validité, ni signature, ni authenticité. Ouvrez le dossier complet pour enregistrer une revue motivée et prendre une décision.
-              </footer>
-            </section>
           </main>
 
           <aside className="authority-analysis-aside">
-            <section className="authority-success-score">
-              <span>SCORE GLOBAL ENREGISTRÉ</span>
-              <strong>{isSealed ? '—' : score?.global == null ? '—' : `${score.global}/100`}</strong>
-              <em>{isSealed ? 'Plis scellés' : score?.riskLevel || 'À analyser'}</em>
-              <i>
-                <b style={{ width: `${isSealed ? 0 : score?.global || 0}%` }} />
-              </i>
-              <small>Les critères non renseignés ne sont pas remplacés par une note nulle.</small>
-            </section>
-
             <section className="authority-analysis-alerts">
               <h2>POINTS À EXAMINER</h2>
               <article>
@@ -558,10 +418,61 @@ export default function EvaluationsPage() {
                 </p>
               </article>
               <h3>CONFORMITÉ</h3>
-              <p>{isSealed ? 'Offre sous pli scellé' : selected.complianceSummary || 'Aucune analyse de conformité enregistrée.'}</p>
+              <p>{isSealed ? 'Cette offre n’a pas encore été ouverte.' : selected.complianceSummary || 'Aucune analyse de conformité enregistrée.'}</p>
             </section>
           </aside>
         </div>
+
+        <section className="authority-verification authority-verification--documents">
+          <header>
+            <h2>État réel de l’examen des pièces</h2>
+            <p>Consultez les documents déposés et les observations déjà enregistrées par la commission.</p>
+          </header>
+          {isSealed ? (
+            <p className="empty-copy">
+              🔒 Les pièces justificatives sont protégées sous scellé cryptographique. Ouvrez les plis pour les examiner et les télécharger.
+            </p>
+          ) : documents.length === 0 ? (
+            <p className="empty-copy">Aucune pièce déposée.</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>DOCUMENT</th>
+                  <th>FICHIER</th>
+                  <th>STATUT DE REVUE</th>
+                  <th>OBSERVATION ENREGISTRÉE</th>
+                  <th>ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documents.map((document) => (
+                  <tr key={document.id}>
+                    <td>
+                      <b>{document.type?.replaceAll('_', ' ')}</b>
+                      <small>Document {displayReference(document.id)}</small>
+                    </td>
+                    <td>{document.nomOriginal}</td>
+                    <td><em>{document.reviewStatus?.replaceAll('_', ' ') || 'à vérifier'}</em></td>
+                    <td>
+                      {document.reviewComment || 'Aucune revue motivée enregistrée.'}
+                      {document.reviewedAt && <small> · {new Intl.DateTimeFormat('fr-SN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(document.reviewedAt))}</small>}
+                    </td>
+                    <td>
+                      <button onClick={() => downloadDocument(document)} title="Télécharger" type="button">
+                        <Download size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <footer>
+            La détection de présence ne certifie ni validité, ni signature, ni authenticité. Ouvrez le dossier complet pour enregistrer une revue motivée et prendre une décision.
+          </footer>
+        </section>
+        </>
       )}
     </div>
   )

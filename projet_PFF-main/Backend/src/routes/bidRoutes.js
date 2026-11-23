@@ -18,9 +18,9 @@ router.get('/:id', authenticate, requirePermission('bids:view'), ctrl.getBid);
 router.post('/:id/documents', authenticate, requirePermission('bids:submit'), upload.single('file'), verifyPdfUpload, ctrl.uploadBidDocument);
 router.post('/:id/documents/:documentId/review', authenticate, requirePermission('evaluations:manage'), validate(documentReviewSchema), ctrl.reviewBidDocument);
 router.post('/:id/submit', authenticate, requirePermission('bids:submit'), ctrl.submitBid);
-router.post('/:id/analyze', authenticate, requirePermission('bids:analyze'), ctrl.analyzeBid);
+router.post('/:id/analyze', authenticate, authorize('commission'), ctrl.analyzeBid);
 router.post('/:id/committee-decision', authenticate, authorize('commission'), validate(committeeDecisionSchema), ctrl.setCommitteeDecision);
-router.post('/:id/recompute', authenticate, requirePermission('bids:analyze'), evalCtrl.recomputeBid);
+router.post('/:id/recompute', authenticate, authorize('commission'), evalCtrl.recomputeBid);
 router.get('/:id/evaluations', authenticate, requirePermission('bids:view'), evalCtrl.listEvaluations);
 router.post('/:id/award', authenticate, requirePermission('contracts:manage'), contractCtrl.awardContract);
 

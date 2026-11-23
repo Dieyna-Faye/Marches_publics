@@ -29,9 +29,9 @@ export const tenderStatusLabels = {
 
 export const offerStatusLabels = {
   BROUILLON: 'Brouillon',
-  DEPOSEE: 'Déposée (scellée)',
+  DEPOSEE: 'Déposée',
   OUVERT: 'Ouvert en séance',
-  SCELLEE: 'Pli scellé 🔒',
+  SCELLEE: 'En attente d’ouverture',
   EN_EVALUATION: 'En évaluation',
   EN_COURS_EVALUATION: 'En cours d’évaluation',
   CONFORME: 'Conforme',
@@ -56,6 +56,15 @@ export function formatMoney(value) {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return '—'
   return `${new Intl.NumberFormat('fr-SN', { maximumFractionDigits: 0 }).format(amount)} FCFA`
+}
+
+export function displayReference(value) {
+  if (value == null || value === '') return '—'
+  const text = String(value)
+  const uuidPattern = '[\\da-f]{8}-[\\da-f]{4}-[\\da-f]{4}-[\\da-f]{4}-[\\da-f]{12}'
+  if (new RegExp(uuidPattern, 'i').test(text)) return text.replace(new RegExp(uuidPattern, 'ig'), (uuid) => uuid.slice(0, 8).toUpperCase())
+  if (/^[\da-f]{40,}$/i.test(text)) return `${text.slice(0, 8)}…${text.slice(-4)}`
+  return text
 }
 
 export function formatDate(value, options = {}) {

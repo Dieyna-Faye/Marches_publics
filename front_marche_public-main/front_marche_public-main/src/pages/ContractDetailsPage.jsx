@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useApp } from '../context/useApp'
-import { formatDate, formatMoney } from '../utils/formatters'
+import { displayReference, formatDate, formatMoney } from '../utils/formatters'
 
 export default function ContractDetailsPage() {
   const { id } = useParams()
@@ -59,7 +59,7 @@ export default function ContractDetailsPage() {
 
   return <div className="contract-detail">
     <Link className="contract-detail__back" to="/app/contrats"><ArrowLeft size={15} /> Retour aux contrats</Link>
-    <header className="authority-page-head"><div><span className="eyebrow">SUIVI D’EXÉCUTION</span><h1>{contract.reference || 'Contrat'}</h1><p>{contract.tender?.title || 'Marché attribué'} · {contract.supplier?.companyName || 'Fournisseur'}</p></div><strong>{contract.status?.replaceAll('_', ' ')}</strong></header>
+    <header className="authority-page-head"><div><span className="eyebrow">SUIVI D’EXÉCUTION</span><h1>{displayReference(contract.reference || 'Contrat')}</h1><p>{contract.tender?.title || 'Marché attribué'} · {contract.supplier?.companyName || 'Fournisseur'}</p></div><strong>{contract.status?.replaceAll('_', ' ')}</strong></header>
     {error && <p className="authority-inline-error" role="alert">{error}</p>}
     <section className="contract-detail__stats"><article><small>MONTANT DU MARCHÉ</small><b>{formatMoney(contract.amount, contract.currency)}</b></article><article><small>AVANCEMENT</small><b>{contract.progress ?? 0}%</b></article><article><small>PÉNALITÉS APPLIQUÉES</small><b>{formatMoney(contract.penaltyApplied, contract.currency)}</b></article><article><small>ÉVALUATION FINALE</small><b>{contract.finalSupplierRating == null ? '—' : `${contract.finalSupplierRating}/5`}</b></article></section>
 

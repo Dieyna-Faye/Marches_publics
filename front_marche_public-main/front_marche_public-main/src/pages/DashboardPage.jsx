@@ -1,12 +1,21 @@
-import { AlertTriangle, Archive, ArrowUpRight, Bell, BriefcaseBusiness, CalendarDays, CircleDollarSign, Download, Eye, FileStack, Megaphone, Send, ShieldAlert, Sparkles, TrendingUp, UsersRound, WalletCards } from 'lucide-react'
+import { AlertTriangle, Archive, ArrowUpRight, Bell, BriefcaseBusiness, CircleDollarSign, FileStack, Megaphone, Send, ShieldAlert, Sparkles, UsersRound, WalletCards } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, EmptyState, LinkAction, SectionCard, StatCard } from '../components/ui'
+import { Badge, EmptyState, LinkAction, SectionCard } from '../components/ui'
 import { useApp } from '../context/useApp'
 import { dashboardService } from '../services/dashboardService'
 import { offerService } from '../services/offerService'
 import { tenderService } from '../services/tenderService'
-import { formatMoney, toTenderView } from '../utils/formatters'
+import { displayReference, formatMoney, toTenderView } from '../utils/formatters'
+
+function DashboardMetricCards({ items }) {
+  return <div className="dashboard-metrics">{items.map((item) => {
+    const [, label, value, helper, tone = 'blue'] = item
+    return <article className="dashboard-metric-card" data-tone={tone} key={label}>
+      <span>{label}</span><strong>{value}</strong><small>{helper}</small>
+    </article>
+  })}</div>
+}
 
 const copyByRole = {
   admin: { title: 'Vue d’ensemble de la plateforme', description: 'Indicateurs fournis par le backend MVP1.' },
@@ -16,7 +25,36 @@ const copyByRole = {
   auditor: { title: 'Tableau de bord d’audit', description: 'Consultez les indicateurs disponibles dans le MVP1.' },
 }
 
-function AdminDashboard({ summary, user, tenders }) {
+function ReceivedOffersPanel({ offers = [], tenders = [], title = 'Soumissions reçues', subtitle = 'Suivez les dossiers déposés et leur état de traitement.', role, limit = 5, emptyMessage = 'Aucune soumission reçue pour le moment.' }) {
+  const sortedOffers = role === 'commission'
+    ? [...offers]
+    : [...offers].sort((left, right) => new Date(right.dateSoumission || right.createdAt || 0) - new Date(left.dateSoumission || left.createdAt || 0))
+  const visibleOffers = sortedOffers.slice(0, limit)
+  const dateFormatter = new Intl.DateTimeFormat('fr-SN', { dateStyle: 'medium' })
+  const tenderTitle = (offer) => offer.appelOffres?.titre || tenders.find((item) => String(item.id) === String(offer.appelOffresId))?.title || `Appel d’offres AO-${displayReference(offer.appelOffresId)}`
+  const statusTone = (offer) => offer.isSealed || offer.statut === 'SCELLEE' ? 'orange' : offer.statut === 'ACCEPTEE' ? 'green' : offer.statut === 'REJETEE' ? 'red' : 'blue'
+  const statusLabel = (offer) => offer.isSealed || offer.statut === 'SCELLEE'
+    ? role === 'commission' ? 'À ouvrir' : 'Non ouverte'
+    : (offer.statut || 'EN_COURS').replaceAll('_', ' ')
+
+  return <section className="received-offers">
+    <header><div><span className="eyebrow">SUIVI DES DOSSIERS</span><h2>{title}</h2><p>{subtitle}</p></div><Link to="/app/soumissions">Tout voir <ArrowUpRight size={15}/></Link></header>
+    <div className="received-offers__list">{visibleOffers.map((offer) => {
+      const sealed = Boolean(offer.isSealed || offer.statut === 'SCELLEE')
+      const target = role === 'commission' ? `/app/analyse/${offer.appelOffresId}` : `/app/soumissions/${offer.id}`
+      const action = role === 'commission' ? (sealed ? 'Ouvrir les plis' : 'Traiter le dossier') : 'Consulter'
+      const dateValue = offer.dateSoumission || offer.createdAt
+      const date = dateValue && !Number.isNaN(new Date(dateValue).getTime()) ? dateFormatter.format(new Date(dateValue)) : 'Date non renseignée'
+      return <article className="received-offer" key={offer.id}>
+        <div className="received-offer__identity"><div className="received-offer__topline"><b>OFFRE-{displayReference(offer.reference || offer.id)}</b><Badge tone={statusTone(offer)}>{statusLabel(offer)}</Badge></div><h3>{tenderTitle(offer)}</h3><p>{sealed ? 'Identité du fournisseur masquée jusqu’à l’ouverture' : (offer.fournisseur?.nom || offer.fournisseur?.name || 'Fournisseur non renseigné')}</p></div>
+        <div className="received-offer__meta"><span><small>DATE DE DÉPÔT</small><b>{date}</b></span><span><small>MONTANT PROPOSÉ</small><b>{sealed ? 'Confidentiel' : formatMoney(offer.montantPropose)}</b></span></div>
+        <Link className="received-offer__action" to={target}>{action}<ArrowUpRight size={14}/></Link>
+      </article>
+    })}{visibleOffers.length === 0 && <p className="received-offers__empty">{emptyMessage}</p>}</div>
+  </section>
+}
+
+function AdminDashboard({ summary, user, tenders, offers }) {
   const firstName = (user?.name || 'Alexandre').split(' ')[0].toUpperCase()
   const adminStats = [
     [Send, 'Soumissions', summary?.nombreOffresRecues ?? 0, 'Offres enregistrées', 'navy'],
@@ -46,9 +84,6 @@ function AdminDashboard({ summary, user, tenders }) {
         <Link to="/app/utilisateurs" className="btn btn--outline" style={{ fontSize: '13px' }}>
           <UsersRound size={15} /> Utilisateurs
         </Link>
-        <Link to="/app/appels-offres/nouveau" className="btn btn--primary" style={{ fontSize: '13px' }}>
-          <BriefcaseBusiness size={15} /> Nouveau Marché
-        </Link>
       </div>
     </header>
 
@@ -59,13 +94,14 @@ function AdminDashboard({ summary, user, tenders }) {
       <section className="admin-chart"><header><div><h2>Offres déposées</h2><p>Historique réel des six derniers mois</p></div><Link to="/app/soumissions">Consulter les offres <ArrowUpRight size={13}/></Link></header><div className="admin-chart__plot"><div className="admin-chart__y"><span>{maxMonthly}</span><span>{Math.round(maxMonthly * .75)}</span><span>{Math.round(maxMonthly * .5)}</span><span>{Math.round(maxMonthly * .25)}</span><span>0</span></div><svg viewBox="0 0 700 235" preserveAspectRatio="none" aria-label="Nombre d’offres réellement déposées par mois"><defs><linearGradient id="adminArea" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#567c8d" stopOpacity=".28"/><stop offset="1" stopColor="#567c8d" stopOpacity="0"/></linearGradient></defs>{chartLine && <><path className="admin-chart__area" d={chartArea}/><path className="admin-chart__line" d={chartLine}/></>}</svg><div className="admin-chart__months">{monthly.map((item, index)=><span key={`${item.month}-${index}`}>{item.month}</span>)}</div></div></section>
     </div>
 
+    <ReceivedOffersPanel offers={offers} tenders={tenders} title="Soumissions reçues" subtitle="Les dépôts les plus récents sur l’ensemble de la plateforme." role="admin" />
     <section className="admin-markets"><header><div><h2>Appels d’offres récents</h2><p>Statut, budget et échéance issus de la base</p></div><CircleDollarSign size={19}/></header><div>{activeMarkets.map(({title,amount,status,deadline})=><article key={title}><span className="admin-market__tag">{status}</span><div className="admin-market__line"><b>{title}</b><strong>{amount}</strong></div><small><span>Date limite : {deadline}</span><span>{status}</span></small></article>)}{activeMarkets.length === 0 && <p className="empty-copy">Aucun appel d’offres enregistré.</p>}</div></section>
   </div>
 }
 
 function SupplierDashboard({ summary, user, tenders, offers }) {
   const firstName = user?.name || 'Fournisseur'
-  const submitted = summary?.nombreSoumissions ?? offers.length
+  const submitted = summary?.nombreSoumissions ?? offers.filter((offer) => ['SOUMISE', 'EN_COURS_EVALUATION', 'ACCEPTEE', 'REJETEE'].includes(offer.statut)).length
   const accepted = summary?.soumissionsAcceptees ?? offers.filter((offer) => offer.statut === 'ACCEPTEE').length
   const evaluating = summary?.soumissionsEnEvaluation ?? offers.filter((offer) => offer.statut === 'EN_COURS_EVALUATION').length
   const rejected = summary?.soumissionsRejetees ?? offers.filter((offer) => offer.statut === 'REJETEE').length
@@ -81,16 +117,25 @@ function SupplierDashboard({ summary, user, tenders, offers }) {
     return { label: new Intl.DateTimeFormat('fr-SN', { month: 'short' }).format(date), count }
   })
   const maxCount = Math.max(1, ...monthCounts.map((item) => item.count))
+  const openTenders = tenders.filter((tender) => tender.status === 'Publié')
+  const draftOffers = offers.filter((offer) => ['BROUILLON', 'EN_COURS'].includes(offer.statut))
+  const nextAction = draftOffers.length
+    ? { title: 'Reprenez une candidature en cours', text: `${draftOffers.length} dossier(s) attendent votre finalisation.`, label: 'Voir mes candidatures', to: '/app/soumissions' }
+    : openTenders.length
+      ? { title: 'Une opportunité vous attend', text: `${openTenders.length} marché(s) sont actuellement ouverts aux candidatures.`, label: 'Parcourir les marchés', to: '/app/appels-offres' }
+      : { title: 'Suivez vos dossiers', text: 'Consultez l’avancement et les décisions sur vos offres déposées.', label: 'Voir mes candidatures', to: '/app/soumissions' }
 
   return <div className="supplier-dashboard">
-    <header className="supplier-dashboard__head"><div><h1>Bonjour, {firstName}</h1><p>Bon retour. Vous avez {tenders.length} opportunité(s) accessible(s) et {evaluating} offre(s) en cours d’évaluation.</p></div><div><button className="authority-btn authority-btn--ghost" type="button"><CalendarDays size={14} /> 30 derniers jours</button><button className="authority-btn authority-btn--dark" onClick={() => window.print()} type="button"><Download size={14} /> Exporter le rapport</button></div></header>
+    <header className="supplier-dashboard__head"><div><span className="eyebrow">ESPACE FOURNISSEUR</span><h1>Bonjour, {firstName}</h1><p>Retrouvez vos candidatures et les marchés ouverts à votre entreprise.</p></div></header>
 
-    <div className="supplier-dashboard__stats">
-      <article><span>OFFRES DISPONIBLES</span><strong>{summary?.opportunitesPubliees ?? tenders.length}</strong><small>Opportunités ouvertes</small></article>
-      <article><span>OFFRES ENVOYÉES</span><strong>{submitted}</strong><small>Soumissions déposées</small></article>
-      <article><span>OFFRES ADMISSIBLES</span><strong>{accepted + evaluating}</strong><small>Acceptées ou en analyse</small></article>
-      <article><span>OFFRES REJETÉES</span><strong>{rejected}</strong><small>Décisions défavorables</small></article>
-    </div>
+    <section className="supplier-next-action"><div className="supplier-next-action__icon"><Sparkles size={21}/></div><div><span className="eyebrow">PROCHAINE ACTION</span><h2>{nextAction.title}</h2><p>{nextAction.text}</p></div><Link className="btn btn--primary" to={nextAction.to}>{nextAction.label}<ArrowUpRight size={16}/></Link></section>
+
+    <DashboardMetricCards items={[
+      [Send, 'OFFRES SOUMISSIONNÉES', submitted, 'Dossiers déposés'],
+      [Sparkles, 'EN COURS D’ANALYSE', evaluating, 'Soumissions examinées'],
+      [FileStack, 'OFFRES ACCEPTÉES', accepted, 'Décisions favorables'],
+      [ShieldAlert, 'OFFRES REJETÉES', rejected, 'Décisions défavorables', 'red'],
+    ]} />
 
     <div className="supplier-dashboard__charts">
       <section className="supplier-evolution"><header><h2>Évolution des soumissions</h2><span><i /> Candidatures</span></header><div className="supplier-bars">{monthCounts.map((item) => <div key={item.label}><i style={{ height: `${Math.max(3, item.count / maxCount * 100)}%` }} /><span>{item.label}</span></div>)}</div></section>
@@ -98,7 +143,7 @@ function SupplierDashboard({ summary, user, tenders, offers }) {
     </div>
 
     <div className="supplier-dashboard__bottom">
-      <section className="supplier-recent"><header><h2>5 dernières candidatures</h2><Link to="/app/soumissions">Voir tout</Link></header><div><table><thead><tr><th>RÉFÉRENCE</th><th>OBJET</th><th>DATE</th><th>STATUT</th><th>ACTION</th></tr></thead><tbody>{recentOffers.map((offer) => <tr key={offer.id}><td><b>OFFRE-{offer.id}</b><small>{offer.accuseReception}</small></td><td>{offer.appelOffres?.titre || `Appel d’offres #${offer.appelOffresId}`}</td><td>{new Intl.DateTimeFormat('fr-SN', { dateStyle: 'medium' }).format(new Date(offer.dateSoumission || offer.createdAt))}</td><td><Badge tone={offer.statut === 'ACCEPTEE' ? 'green' : offer.statut === 'REJETEE' ? 'red' : 'blue'}>{offer.statut?.replaceAll('_', ' ')}</Badge></td><td><Link to={`/app/soumissions/${offer.id}`}><Eye size={14} /></Link></td></tr>)}</tbody></table>{recentOffers.length === 0 && <p className="empty-copy">Aucune candidature déposée.</p>}</div></section>
+      <ReceivedOffersPanel offers={recentOffers} tenders={tenders} title="Mes dernières soumissions" subtitle="Retrouvez rapidement l’état de vos candidatures." role="supplier" emptyMessage="Aucune candidature déposée." />
       <aside className="supplier-notifications"><header><h2>Notifications</h2><Bell size={15} /></header><article className="is-blue"><b>{tenders.length} marché(s) disponible(s)</b><p>Consultez les opportunités ouvertes correspondant à votre activité.</p><Link to="/app/appels-offres">Voir les marchés</Link></article>{evaluating > 0 && <article className="is-orange"><b>Évaluation en cours</b><p>{evaluating} dossier(s) sont actuellement examinés.</p><Link to="/app/soumissions">Suivre mes offres</Link></article>}<article><b>Documents déposés</b><p>{summary?.documentsDeposes ?? offers.reduce((total, offer) => total + (offer.documents?.length || 0), 0)} pièce(s) enregistrée(s).</p><Link to="/app/documents">Voir mes documents</Link></article></aside>
     </div>
   </div>
@@ -117,34 +162,15 @@ function CommissionDashboard({ tenders, offers, user }) {
     return rightWeight - leftWeight || new Date(right.dateSoumission || right.createdAt) - new Date(left.dateSoumission || left.createdAt)
   })
   const stats = [
-    [FileStack, 'Plis scellés reçus', sealedOffers.length, 'À déverrouiller en séance d’ouverture', 'blue'],
-    [FileStack, 'Pièces à examiner', pendingDocuments.length, 'Pièces sans revue motivée', 'navy'],
-    [Sparkles, 'Analyses à lancer', waitingAnalysis.length, 'Offres ouvertes sans analyse enregistrée', 'green'],
-    [ShieldAlert, 'Décisions en attente', waitingDecision.length, 'Après examen et notation complets', 'orange'],
+    [FileStack, 'Offres non ouvertes', sealedOffers.length, 'À ouvrir avant leur analyse', 'blue'],
+    [FileStack, 'Documents à vérifier', pendingDocuments.length, 'Vérification à faire', 'navy'],
+    [Sparkles, 'Offres à analyser', waitingAnalysis.length, 'Analyse à faire', 'green'],
+    [ShieldAlert, 'Décisions à prendre', waitingDecision.length, 'Décision à rendre', 'orange'],
   ]
   return <div className="dashboard-page commission-dashboard">
     <header className="dashboard-welcome"><div><span className="eyebrow">ESPACE COMMISSION</span><h1>Bonjour, {firstName}</h1><p>Traitez les pièces, enregistrez vos notes et motivez chaque décision. Les actions de la commission sont conservées dans le journal d’audit.</p></div><div className="dashboard-welcome__actions"><Link className="btn btn--primary" to="/app/analyse">Ouvrir l’analyse approfondie</Link></div></header>
-    <div className="stats-grid">{stats.map(([Icon, label, value, helper, tone]) => <StatCard key={label} icon={Icon} label={label} value={value} helper={helper} tone={tone} />)}</div>
-    <SectionCard title="File de travail de la commission" subtitle="Les dossiers les plus urgents apparaissent en premier. Ouvrez un dossier pour consulter les revues enregistrées et traiter l’offre.">
-      <div className="commission-worklist">{orderedOffers.slice(0, 12).map((offer) => {
-        const tender = tenders.find((item) => String(item.id) === String(offer.appelOffresId))
-        const pendingCount = (offer.documents || []).filter((document) => !['conforme', 'non_conforme'].includes(document.reviewStatus)).length
-        const isSealed = Boolean(offer.isSealed || offer.statut === 'SCELLEE')
-        const state = isSealed
-          ? '🔒 Pli scellé (Ouverture des plis requise)'
-          : offer.committeeDecision
-            ? `Décision : ${offer.committeeDecision === 'validee' ? 'validée' : 'rejetée'}`
-            : !offer.analyzedAt
-              ? 'Analyse à lancer'
-              : pendingCount
-                ? `${pendingCount} pièce(s) à examiner`
-                : 'Décision à motiver'
-        return <article key={offer.id}><div><b>{offer.reference || `Offre ${offer.id}`}</b><small>{tender?.title || `Appel d’offres #${offer.appelOffresId}`} · {offer.fournisseur?.nom || (isSealed ? 'Pli scellé' : 'Fournisseur')}</small><span>{isSealed ? 'Montant scellé' : formatMoney(offer.montantPropose)} · {isSealed ? '—' : `${offer.delaiExecutionJours ?? '—'} jours`} · {state}</span></div><div>{!isSealed && <Link to={`/app/soumissions/${offer.id}`}>Dossier complet</Link>}<Link to={`/app/analyse/${offer.appelOffresId}`}>{isSealed ? 'Ouvrir les plis' : 'Analyse approfondie'}</Link></div></article>
-      })}{orderedOffers.length === 0 && <p className="empty-copy">Aucune offre déposée. Les offres apparaîtront ici dès leur dépôt.</p>}</div>
-    </SectionCard>
-    <SectionCard title="Procédures disponibles" subtitle="Accédez directement à l’analyse des offres associées à une procédure.">
-      <div className="commission-tender-list">{tenders.map((tender) => <article key={tender.id}><div><b>{tender.title}</b><small>{tender.status} · {tender.deadline}</small></div><Link to={`/app/analyse/${tender.id}`}>Examiner les offres</Link></article>)}{tenders.length === 0 && <p className="empty-copy">Aucun appel d’offres disponible.</p>}</div>
-    </SectionCard>
+    <DashboardMetricCards items={stats} />
+    <ReceivedOffersPanel offers={orderedOffers} tenders={tenders} title="File de travail de la commission" subtitle="Les dépôts récents et les dossiers à traiter sont regroupés ici." role="commission" limit={12} emptyMessage="Aucune offre déposée. Les offres apparaîtront ici dès leur dépôt." />
   </div>
 }
 
@@ -180,14 +206,16 @@ function AuthorityDashboard({ summary, user, tenders, offers }) {
         </div>
       </header>
 
-      <div className="stats-grid">{stats.map(([Icon, label, value, helper, tone]) => <StatCard key={label} icon={Icon} label={label} value={value} helper={helper} tone={tone} />)}</div>
+      <DashboardMetricCards items={stats} />
+
+      <ReceivedOffersPanel offers={offers} tenders={tenders} title="Soumissions reçues" subtitle="Les dernières offres déposées sur vos marchés." role="authority" />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '20px', marginTop: '24px' }}>
         <SectionCard title="Mes procédures en cours" subtitle="État d’avancement de vos marchés dans le cycle de passation" action={<LinkAction to="/app/appels-offres" />}>
           <div className="deadline-list">
             {tenders.slice(0, 6).map((tender) => (
               <Link key={tender.id} to={`/app/appels-offres/${tender.id}`}>
-                <span className="deadline-date"><b>AO</b><small>{tender.id}</small></span>
+                <span className="deadline-date"><b>AO</b><small>{displayReference(tender.id)}</small></span>
                 <div><b>{tender.title}</b><small>{tender.budget} · Date limite : {tender.deadline}</small></div>
                 <Badge tone={tender.status === 'Publié' ? 'green' : tender.status === 'Brouillon' ? 'orange' : tender.status === 'Attribué' ? 'ice' : 'blue'}>
                   {tender.status}
@@ -210,7 +238,7 @@ function AuthorityDashboard({ summary, user, tenders, offers }) {
             {inEval > 0 && (
               <div style={{ padding: '14px', borderRadius: '10px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af' }}>
                 <strong>{inEval} marché(s) en dépouillement ou évaluation</strong>
-                <p style={{ margin: '4px 0 8px', fontSize: '13px' }}>La commission traite les plis ou a transmis son classement pour attribution.</p>
+                <p style={{ margin: '4px 0 8px', fontSize: '13px' }}>La commission est responsable de l’ouverture et de l’analyse des plis. Vous pouvez suivre l’état de ces procédures.</p>
                 <Link to="/app/appels-offres" style={{ fontWeight: 700, fontSize: '13px', color: '#2563eb' }}>Suivre les évaluations →</Link>
               </div>
             )}
@@ -225,7 +253,7 @@ function AuthorityDashboard({ summary, user, tenders, offers }) {
   )
 }
 
-function AuditorDashboard({ summary, user, tenders }) {
+function AuditorDashboard({ summary, user, tenders, offers }) {
   const firstName = user?.name || 'Auditeur'
   const totalTenders = tenders.length
   const alertsCount = summary?.kpis?.alertesOuvertes ?? 0
@@ -245,7 +273,7 @@ function AuditorDashboard({ summary, user, tenders }) {
         <div>
           <span className="eyebrow">ESPACE CONTRÔLE DE RÉGULARITÉ & AUDIT</span>
           <h1>Bonjour, {firstName}</h1>
-          <p>Consultez les journaux d’audit infalsifiables, inspectez les alertes IA de collusion et assurez le contrôle de légalité.</p>
+          <p>Consultez les procédures, les alertes disponibles et les événements consignés dans le journal d’audit.</p>
         </div>
         <div className="dashboard-welcome__actions">
           <Link className="btn btn--primary" to="/app/audit">
@@ -257,15 +285,17 @@ function AuditorDashboard({ summary, user, tenders }) {
         </div>
       </header>
 
-      <div className="stats-grid">{stats.map(([Icon, label, value, helper, tone]) => <StatCard key={label} icon={Icon} label={label} value={value} helper={helper} tone={tone} />)}</div>
+      <DashboardMetricCards items={stats} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '20px', marginTop: '24px' }}>
-        <SectionCard title="Surveillance des procédures" subtitle="Historique des marchés et conformité procédurale" action={<LinkAction to="/app/appels-offres" />}>
-          <div className="deadline-list">
-            {tenders.slice(0, 6).map((tender) => (
+      <ReceivedOffersPanel offers={offers} tenders={tenders} title="Soumissions à contrôler" subtitle="Consultez les dépôts récents dans le périmètre de contrôle." role="auditor" />
+
+      <div className="auditor-dashboard__lower">
+        <SectionCard title="Surveillance des procédures" subtitle="Procédures récentes sous contrôle" action={<LinkAction to="/app/appels-offres" />}>
+          <div className="deadline-list auditor-procedure-list">
+            {tenders.slice(0, 4).map((tender) => (
               <Link key={tender.id} to={`/app/appels-offres/${tender.id}`}>
-                <span className="deadline-date"><b>AO</b><small>{tender.id}</small></span>
-                <div><b>{tender.title}</b><small>{tender.authority} · Budget : {tender.budget}</small></div>
+                <span className="deadline-date"><b>AO</b><small>{displayReference(tender.id)}</small></span>
+                <div><b>{tender.title}</b><small>{tender.authority || 'Autorité contractante'} · Budget {tender.budget}</small></div>
                 <Badge tone={tender.status === 'Publié' ? 'green' : tender.status === 'Attribué' ? 'ice' : 'neutral'}>
                   {tender.status}
                 </Badge>
@@ -275,20 +305,11 @@ function AuditorDashboard({ summary, user, tenders }) {
           </div>
         </SectionCard>
 
-        <SectionCard title="Garanties de traçabilité & IA" subtitle="Sécurité et non-répudiation de la plateforme">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-              <strong>Coffre-fort & Scellement des Plis</strong>
-              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#647681' }}>Les offres restent strictement scellées jusqu’à la séance formelle d’ouverture des plis, empêchant toute fuite d’information.</p>
-            </div>
-            <div style={{ padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-              <strong>Détection des Collusions & Prix Atypiques</strong>
-              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#647681' }}>Algorithmes Machine Learning (Isolation Forest) et graphes de liens (téléphones, adresses et SIRET partagés).</p>
-            </div>
-            <div style={{ padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-              <strong>Traçabilité des Décisions</strong>
-              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#647681' }}>Chaque note, validation ou rejet de document est motivé et signé avec l’identifiant de l’utilisateur et l’adresse IP.</p>
-            </div>
+        <SectionCard title="Garanties de contrôle" subtitle="Les règles appliquées aux dossiers">
+          <div className="auditor-control-list">
+            <article><b>Offres protégées</b><p>Le contenu reste confidentiel jusqu’à l’ouverture officielle.</p></article>
+            <article><b>Signaux de risque</b><p>Les anomalies détectées sont à vérifier par les personnes habilitées.</p></article>
+            <article><b>Historique conservé</b><p>Les actions et décisions sont consignées dans le journal d’audit.</p></article>
           </div>
         </SectionCard>
       </div>
@@ -316,7 +337,12 @@ export default function DashboardPage() {
         if (!active) return
         setTenders(tenderItems.map(toTenderView))
         if (['admin', 'auditor'].includes(role)) {
-          setSummary(await dashboardService.getSummary())
+          const [dashboard, offerResults] = await Promise.all([
+            dashboardService.getSummary(),
+            Promise.allSettled(tenderItems.map((tender) => offerService.byTender(tender.id))),
+          ])
+          setSummary(dashboard)
+          setOffers(offerResults.flatMap((result) => result.status === 'fulfilled' ? result.value : []))
         } else if (role === 'authority') {
           const [dashboard, results] = await Promise.all([
             dashboardService.getSummary(),
@@ -367,7 +393,7 @@ export default function DashboardPage() {
   if (role === 'admin') {
     if (loading) return <div className="loading-state"><span className="spinner" /> Chargement du tableau de bord…</div>
     if (error) return <EmptyState icon={FileStack} title="Tableau de bord indisponible" description={error} />
-    return <AdminDashboard summary={summary} user={user} tenders={tenders} />
+    return <AdminDashboard summary={summary} user={user} tenders={tenders} offers={offers} />
   }
   if (role === 'authority') {
     if (loading) return <div className="loading-state"><span className="spinner" /> Chargement de l’espace autorité…</div>
@@ -387,16 +413,16 @@ export default function DashboardPage() {
   if (role === 'auditor') {
     if (loading) return <div className="loading-state"><span className="spinner" /> Chargement du tableau de bord d’audit…</div>
     if (error) return <EmptyState icon={FileStack} title="Espace d’audit indisponible" description={error} />
-    return <AuditorDashboard summary={summary} user={user} tenders={tenders} />
+    return <AuditorDashboard summary={summary} user={user} tenders={tenders} offers={offers} />
   }
 
   return (
     <div className="dashboard-page">
-      <header className="dashboard-welcome"><div><span className="eyebrow">{date.toUpperCase()}</span><h1>{copy.title}</h1><p>{copy.description}</p></div><div className="dashboard-welcome__actions">{(role === 'admin' || role === 'authority') && <Link className="btn btn--primary" to="/app/appels-offres/nouveau">+ Nouvel appel d’offres</Link>}{role === 'supplier' && <Link className="btn btn--primary" to="/app/appels-offres">Voir les opportunités</Link>}</div></header>
+      <header className="dashboard-welcome"><div><span className="eyebrow">{date.toUpperCase()}</span><h1>{copy.title}</h1><p>{copy.description}</p></div><div className="dashboard-welcome__actions">{role === 'authority' && <Link className="btn btn--primary" to="/app/appels-offres/nouveau">+ Nouvel appel d’offres</Link>}{role === 'supplier' && <Link className="btn btn--primary" to="/app/appels-offres">Voir les opportunités</Link>}</div></header>
       {loading ? <div className="loading-state"><span className="spinner" /> Chargement du tableau de bord…</div> : error ? <EmptyState icon={FileStack} title="Tableau de bord indisponible" description={error} /> : <>
-        <div className={`stats-grid ${stats.length < 4 ? 'stats-grid--three' : ''}`}>{stats.map(([Icon, label, value, helper, tone]) => <StatCard key={label} icon={Icon} label={label} value={value} helper={helper} tone={tone} />)}</div>
+        <DashboardMetricCards items={stats} />
         <SectionCard title="Appels d’offres récents" subtitle="Données les plus récentes retournées par l’API" action={<LinkAction to="/app/appels-offres" />}>
-          <div className="deadline-list">{tenders.slice(0, 5).map((tender) => <Link key={tender.id} to={`/app/appels-offres/${tender.id}`}><span className="deadline-date"><b>AO</b><small>{tender.id}</small></span><div><b>{tender.title}</b><small>{tender.authority} · {tender.deadline}</small></div><Badge tone={tender.status === 'Publié' ? 'green' : tender.status === 'Brouillon' ? 'orange' : 'neutral'}>{tender.status}</Badge></Link>)}</div>
+          <div className="deadline-list">{tenders.slice(0, 5).map((tender) => <Link key={tender.id} to={`/app/appels-offres/${tender.id}`}><span className="deadline-date"><b>AO</b><small>{displayReference(tender.id)}</small></span><div><b>{tender.title}</b><small>{tender.authority} · {tender.deadline}</small></div><Badge tone={tender.status === 'Publié' ? 'green' : tender.status === 'Brouillon' ? 'orange' : 'neutral'}>{tender.status}</Badge></Link>)}</div>
         </SectionCard>
       </>}
     </div>

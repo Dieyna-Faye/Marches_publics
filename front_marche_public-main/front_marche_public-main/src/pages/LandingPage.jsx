@@ -1,6 +1,6 @@
 import {
-  AlertTriangle, ArrowRight, BrainCircuit, Check, ChevronDown, ChevronUp,
-  ClipboardCheck, CloudUpload, FileText, LayoutGrid, ListChecks, Network,
+  AlertTriangle, ArrowRight, Banknote, BrainCircuit, Check, ChevronDown, ChevronUp,
+  CircleCheck, ClipboardCheck, CloudUpload, FileText, LayoutGrid, ListChecks, Network,
   Shield, Signature, Sparkles, TrendingUp, X,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -51,40 +51,32 @@ export default function LandingPage() {
   }, [])
 
   const budget = tenders.reduce((sum, tender) => sum + Number(tender.estimatedBudget || 0), 0)
+  const openTenders = tenders.filter((tender) => {
+    const deadline = tender.dateLimiteSoumission || tender.submissionDeadline
+    return !deadline || new Date(deadline).getTime() >= Date.now()
+  }).length
 
   return (
     <main>
       <section className="p-home-hero" style={{ '--p-hero-image': `url(${tenderImage})` }}>
         <div className="p-home-hero__backdrop" />
-        <div className="p-home-hero__split">
-          {/* Espace visuel ouvert à gauche pour admirer l'image du hero */}
-          <div className="p-home-hero__visual-space" aria-hidden="true" />
-
-          {/* Bandeau transparent sur toute la hauteur positionné à droite */}
-          <div className="p-home-hero__panel">
-            <div className="p-home-hero__panel-inner">
-              <span className="p-kicker p-kicker--light"><Sparkles size={14} /> L’IA au service de la commande publique</span>
-              <h1>Simplifiez et sécurisez la gestion<br />des marchés publics grâce à<br />l’intelligence artificielle</h1>
-              <p>Une plateforme intelligente, transparente et performante pour moderniser chaque étape de la commande publique.</p>
-              <div className="p-actions">
-                <Link className="p-button p-button--blue" to="/connexion">
-                  Se connecter <ArrowRight size={14} />
-                </Link>
-                <Link className="p-button p-button--white" to="/appels-offres">
-                  Appels d’offres
-                </Link>
-              </div>
+        <div className="p-home-hero__content">
+          <div className="p-home-hero__copy">
+            <span className="p-home-hero__eyebrow"><Sparkles size={15} /> PROCUREAI · COMMANDE PUBLIQUE</span>
+            <h1>Simplifiez et sécurisez la gestion des <em>marchés publics</em> grâce à l’intelligence artificielle</h1>
+            <p>Une plateforme intelligente et transparente pour moderniser chaque étape de la commande publique.</p>
+            <div className="p-home-hero__actions">
+              <Link className="p-button p-button--blue" to="/appels-offres">
+                Explorer les appels d’offres <ArrowRight size={16} />
+              </Link>
+              <Link className="p-button p-button--glass" to="/connexion">Se connecter</Link>
             </div>
           </div>
         </div>
-      </section>
-
-      <section className="p-stats">
-        <div className="p-container">
-          <span><strong>{tenders.length}</strong><small>Appels publiés</small></span>
-          <span><strong>—</strong><small>Fournisseurs inscrits</small></span>
-          <span><strong>{formatMoney(budget)}</strong><small>Budget des appels publiés</small></span>
-          <span><strong>—</strong><small>Historique d’audit public</small></span>
+        <div className="p-home-hero__metrics" aria-label="Chiffres des appels d’offres publics">
+          <article><span className="p-home-hero__metric-icon"><FileText size={22} /></span><div><strong>{tenders.length}</strong><small>Appels publiés</small></div><ArrowRight size={17} /></article>
+          <article><span className="p-home-hero__metric-icon p-home-hero__metric-icon--accent"><CircleCheck size={22} /></span><div><strong>{openTenders}</strong><small>Encore ouverts</small></div><ArrowRight size={17} /></article>
+          <article><span className="p-home-hero__metric-icon"><Banknote size={22} /></span><div><strong>{formatMoney(budget)}</strong><small>Budget estimé cumulé</small></div><ArrowRight size={17} /></article>
         </div>
       </section>
 

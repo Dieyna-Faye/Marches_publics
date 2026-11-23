@@ -4,6 +4,12 @@
   --font-title: 'Outfit', sans-serif;
   --font-text: 'Plus Jakarta Sans', sans-serif;
   --font-action: 'Mulish', sans-serif;
+  --font-size-caption: 12px;
+  --font-size-small: 13px;
+  --font-size-body: 14px;
+  --font-size-subheading: 18px;
+  --font-size-section: 23px;
+  --font-size-page: clamp(30px, 2.7vw, 38px);
   font-family: var(--font-text);
   color: #2f4156;
   background: #f7f8fa;
