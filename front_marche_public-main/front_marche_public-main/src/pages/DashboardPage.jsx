@@ -56,8 +56,12 @@ function ReceivedOffersPanel({ offers = [], tenders = [], title = 'Soumissions r
 
 function AdminDashboard({ summary, user, tenders, offers }) {
   const firstName = (user?.name || 'Alexandre').split(' ')[0].toUpperCase()
+  // Le dashboard charge aussi les offres marché par marché : ce total reflète
+  // exactement les dossiers affichés dans la liste, même si le résumé API est
+  // en retard ou renvoie un compteur vide.
+  const receivedOffers = offers.filter((offer) => offer.statut !== 'BROUILLON').length
   const adminStats = [
-    [Send, 'Soumissions', summary?.nombreOffresRecues ?? 0, 'Offres enregistrées', 'navy'],
+    [Send, 'Soumissions', receivedOffers, 'Offres déposées', 'navy'],
     [BriefcaseBusiness, 'Appels publiés', summary?.appelsOffresPublies ?? 0, 'Procédures ouvertes', 'blue'],
     [UsersRound, 'Fournisseurs', summary?.nombreFournisseursInscrits ?? 0, 'Comptes enregistrés', 'ice'],
     [AlertTriangle, 'Brouillons', summary?.appelsOffresBrouillon ?? 0, 'À finaliser', 'cream'],
@@ -87,7 +91,7 @@ function AdminDashboard({ summary, user, tenders, offers }) {
       </div>
     </header>
 
-    <section className="admin-ai"><span><Sparkles size={20}/></span><div className="admin-ai__intro"><b>Aperçu Intelligent ProcureAI</b><small>Données actualisées</small></div><article><b>ACTIVITÉ</b><p>{summary?.nombreOffresRecues ?? 0} offre(s) reçue(s) sur {summary?.nombreAppelsOffres ?? 0} procédure(s).</p></article><article><b>PARTICIPATION</b><p>Moyenne réelle de {summary?.tauxParticipationMoyen ?? 0} offre(s) par appel publié.</p></article><article><b>SUIVI</b><p>{summary?.appelsOffresBrouillon ?? 0} appel(s) d’offres restent à finaliser.</p></article></section>
+    <section className="admin-ai"><span><Sparkles size={20}/></span><div className="admin-ai__intro"><b>Aperçu Intelligent ProcureAI</b><small>Données actualisées</small></div><article><b>ACTIVITÉ</b><p>{receivedOffers} offre(s) reçue(s) sur {summary?.nombreAppelsOffres ?? tenders.length} procédure(s).</p></article><article><b>PARTICIPATION</b><p>Moyenne réelle de {summary?.tauxParticipationMoyen ?? 0} offre(s) par appel publié.</p></article><article><b>SUIVI</b><p>{summary?.appelsOffresBrouillon ?? 0} appel(s) d’offres restent à finaliser.</p></article></section>
 
     <div className="admin-dashboard__main">
       <div className="admin-stats">{adminStats.map(([Icon,label,value,helper,tone])=><article className={`admin-stat admin-stat--${tone}`} key={label}><header><span>{label}</span><i><Icon size={17}/></i></header><strong>{value}</strong><small>{helper}</small></article>)}</div>
