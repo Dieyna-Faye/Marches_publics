@@ -322,6 +322,21 @@ const setCommitteeDecision = asyncHandler(async (req, res) => {
   bid.committeeDecidedBy = req.user.id;
   bid.status = decision === 'validee' ? 'conforme' : 'rejetee';
   await bid.save();
+
+  // Passer le marché en attribution uniquement lorsque toutes les offres
+  // déposées ont reçu une décision de la commission.
+  const submittedBids = await Bid.findAll({
+    where: { tenderId: bid.tenderId, status: { [Op.ne]: 'brouillon' } },
+    attributes: ['committeeDecision'],
+  });
+  if (submittedBids.length > 0 && submittedBids.every((item) => item.committeeDecision)) {
+    const tender = await Tender.findByPk(bid.tenderId);
+    if (tender?.status === 'en_evaluation') {
+      tender.status = 'en_attribution';
+      await tender.save();
+    }
+  }
+
   await writeAudit({ user: req.user, action: 'COMMITTEE_DECISION', entity: 'Bid', entityId: bid.id, req, details: { decision, comment } });
   res.json({ id: bid.id, status: bid.status, committeeDecision: bid.committeeDecision, committeeComment: bid.committeeComment, committeeDecidedAt: bid.committeeDecidedAt });
 });

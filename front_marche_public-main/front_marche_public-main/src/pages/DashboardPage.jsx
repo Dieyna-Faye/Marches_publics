@@ -178,13 +178,13 @@ function AuthorityDashboard({ summary, user, tenders, offers }) {
   const firstName = user?.name || 'Autorité'
   const published = tenders.filter((t) => t.status === 'Publié').length
   const drafts = tenders.filter((t) => t.status === 'Brouillon' || t.status === 'En validation').length
-  const inEval = tenders.filter((t) => t.status === 'En cours d’évaluation' || t.status === 'Clôturé').length
+  const inEval = tenders.filter((t) => ['En cours d’évaluation', 'Clôturé', 'En attribution'].includes(t.status)).length
   const awarded = tenders.filter((t) => t.status === 'Attribué').length
 
   const stats = [
     [BriefcaseBusiness, 'Procédures actives', published, 'Appels ouverts aux soumissions', 'navy'],
     [Send, 'Plis enregistrés', offers.length, 'Offres reçues sur vos marchés', 'blue'],
-    [FileStack, 'En évaluation / Clôturés', inEval, 'Prêts pour ouverture ou notation', 'orange'],
+    [FileStack, 'Évaluation / attribution', inEval, 'Examen ou attribution en attente', 'orange'],
     [CircleDollarSign, 'Marchés attribués', awarded, 'Contrats finalisés', 'green'],
   ]
 
