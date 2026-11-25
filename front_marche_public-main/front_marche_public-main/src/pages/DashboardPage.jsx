@@ -6,7 +6,7 @@ import { useApp } from '../context/useApp'
 import { dashboardService } from '../services/dashboardService'
 import { offerService } from '../services/offerService'
 import { tenderService } from '../services/tenderService'
-import { displayReference, formatMoney, toTenderView } from '../utils/formatters'
+import { displayReference, formatMoney, tenderBelongsToUser, toTenderView } from '../utils/formatters'
 
 function DashboardMetricCards({ items }) {
   return <div className="dashboard-metrics">{items.map((item) => {
@@ -339,18 +339,21 @@ export default function DashboardPage() {
       try {
         const tenderItems = await tenderService.list()
         if (!active) return
-        setTenders(tenderItems.map(toTenderView))
+        const visibleTenders = role === 'authority'
+          ? tenderItems.filter((tender) => tenderBelongsToUser(tender, user?.id))
+          : tenderItems
+        setTenders(visibleTenders.map(toTenderView))
         if (['admin', 'auditor'].includes(role)) {
           const [dashboard, offerResults] = await Promise.all([
             dashboardService.getSummary(),
-            Promise.allSettled(tenderItems.map((tender) => offerService.byTender(tender.id))),
+            Promise.allSettled(visibleTenders.map((tender) => offerService.byTender(tender.id))),
           ])
           setSummary(dashboard)
           setOffers(offerResults.flatMap((result) => result.status === 'fulfilled' ? result.value : []))
         } else if (role === 'authority') {
           const [dashboard, results] = await Promise.all([
             dashboardService.getSummary(),
-            Promise.allSettled(tenderItems.map((tender) => offerService.byTender(tender.id))),
+            Promise.allSettled(visibleTenders.map((tender) => offerService.byTender(tender.id))),
           ])
           setSummary(dashboard)
           setOffers(results.flatMap((result) => result.status === 'fulfilled' ? result.value : []))

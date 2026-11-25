@@ -99,3 +99,11 @@ export function toTenderView(tender) {
     status: tenderStatusLabels[tender.statut] || tenderStatusLabels[String(tender.status || '').toUpperCase()] || tender.status || tender.statut,
   }
 }
+
+export function tenderBelongsToUser(tender, userId) {
+  const createdBy = tender.createdBy
+  const ownerId = createdBy && typeof createdBy === 'object'
+    ? createdBy.id
+    : createdBy ?? tender.createdById
+  return ownerId != null && userId != null && String(ownerId) === String(userId)
+}

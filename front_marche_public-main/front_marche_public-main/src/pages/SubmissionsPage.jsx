@@ -5,7 +5,7 @@ import { Badge, SearchFilter } from '../components/ui'
 import { useApp } from '../context/useApp'
 import { offerService } from '../services/offerService'
 import { tenderService } from '../services/tenderService'
-import { displayReference, formatDate, formatMoney, initials, offerStatusLabels } from '../utils/formatters'
+import { displayReference, formatDate, formatMoney, initials, offerStatusLabels, tenderBelongsToUser } from '../utils/formatters'
 
 function presentOffer(offer, fallbackUser) {
   return {
@@ -123,7 +123,7 @@ export default function SubmissionsPage() {
           offers = await offerService.mine()
         } else {
           let tenders = await tenderService.list()
-          if (role === 'authority') tenders = tenders.filter((tender) => tender.createdById === user.id)
+          if (role === 'authority') tenders = tenders.filter((tender) => tenderBelongsToUser(tender, user?.id))
           const results = await Promise.allSettled(tenders.map((tender) => offerService.byTender(tender.id)))
           offers = results.flatMap((result) => result.status === 'fulfilled' ? result.value : [])
         }
