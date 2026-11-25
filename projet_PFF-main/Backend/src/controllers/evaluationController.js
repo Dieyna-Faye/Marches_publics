@@ -16,6 +16,7 @@ async function canViewBidEvaluations(user, bid) {
 const createCriteria = asyncHandler(async (req, res) => {
   const tender = await Tender.findByPk(req.params.id);
   if (!tender) return res.status(404).json({ error: 'Appel d\'offres introuvable' });
+  if (tender.status !== 'brouillon') return res.status(409).json({ error: 'La grille technique doit être définie pendant la préparation du marché, avant sa publication.' });
   const body = req.validated;
   const criteria = await EvaluationCriteria.create({
     tenderId: tender.id,

@@ -1,7 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const { Op } = require('sequelize');
 const models = require('../models');
-const { Tender, TenderDocument, User, Bid, Supplier, BidDocument } = models;
+const { Tender, TenderDocument, User, Bid, Supplier, BidDocument, EvaluationCriteria } = models;
 const { TENDER_TYPES, TENDER_STATUSES } = require('../config/constants');
 const { writeAudit } = require('../middleware/audit');
 const { UPLOAD_DIR } = require('../middleware/upload');
@@ -115,9 +115,15 @@ const updateTender = asyncHandler(async (req, res) => {
   res.json(tender);
 });
 
+async function hasTechnicalCriteria(tenderId) {
+  const criteria = await EvaluationCriteria.findAll({ where: { tenderId }, attributes: ['category'] });
+  return criteria.some((item) => !['administratif', 'financier'].includes(String(item.category || '').toLowerCase()));
+}
+
 const publishTender = asyncHandler(async (req, res) => {
   const tender = await Tender.findByPk(req.params.id);
   if (!tender) return res.status(404).json({ error: 'Appel d\'offres introuvable' });
+  if (!(await hasTechnicalCriteria(tender.id))) return res.status(409).json({ error: 'Ajoutez au moins un critère technique issu du dossier de consultation avant de publier le marché.' });
   tender.status = 'publie';
   tender.publishedAt = new Date();
   await tender.save();
@@ -157,6 +163,7 @@ const submitForValidation = asyncHandler(async (req, res) => {
   if (tender.status !== 'brouillon') {
     return res.status(400).json({ error: 'Seul un appel d\'offres en brouillon peut être soumis pour validation.' });
   }
+  if (!(await hasTechnicalCriteria(tender.id))) return res.status(409).json({ error: 'Ajoutez au moins un critère technique issu du dossier de consultation avant de soumettre le marché pour validation.' });
   tender.status = 'en_validation';
   await tender.save();
   await writeAudit({ user: req.user, action: 'SUBMIT_TENDER_VALIDATION', entity: 'Tender', entityId: tender.id, req });

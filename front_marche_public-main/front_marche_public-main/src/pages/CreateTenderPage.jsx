@@ -2,7 +2,7 @@ import {
   AlertCircle,
   ArrowRight,
   Bot, Check, ChevronRight, CircleCheck, ClipboardCheck, FileSearch, FileText,
-  Gavel, MapPin, Save, Send, UploadCloud,
+  Gavel, MapPin, Plus, Save, Send, Trash2, UploadCloud,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -32,6 +32,17 @@ const initialForm = {
   localisation: 'Dakar, Sénégal',
 }
 
+function newTechnicalCriterion() {
+  return {
+    localId: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    label: '',
+    description: '',
+    weight: '',
+    maxScore: '20',
+    category: 'technique',
+  }
+}
+
 const steps = [
   { label: '1. Dépôt des besoins', icon: ClipboardCheck, current: true },
   { label: '2. Analyse documentaire IA', icon: Bot },
@@ -43,6 +54,8 @@ const steps = [
 
 export default function CreateTenderPage() {
   const [form, setForm] = useState(initialForm)
+  const [criteria, setCriteria] = useState([newTechnicalCriterion()])
+  const [createdTenderId, setCreatedTenderId] = useState('')
   const [file, setFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -53,15 +66,21 @@ export default function CreateTenderPage() {
 
   useEffect(() => {
     if (!id) return
-    tenderService.get(id).then((tender) => setForm((current) => ({
-      ...current,
-      titre: tender.titre,
-      description: tender.description,
-      budgetEstimatif: tender.budgetEstimatif,
-      typeMarche: tender.typeMarche,
-      dateLimiteSoumission: tender.dateLimiteSoumission ? new Date(tender.dateLimiteSoumission).toISOString().slice(0, 16) : '',
-      reference: `AO-${tender.id}`,
-    }))).catch((requestError) => {
+    Promise.all([tenderService.get(id), tenderService.criteria(id)]).then(([tender, existingCriteria]) => {
+      setForm((current) => ({
+        ...current,
+        titre: tender.titre,
+        description: tender.description,
+        budgetEstimatif: tender.budgetEstimatif,
+        typeMarche: tender.typeMarche,
+        dateLimiteSoumission: tender.dateLimiteSoumission ? new Date(tender.dateLimiteSoumission).toISOString().slice(0, 16) : '',
+        reference: `AO-${tender.id}`,
+      }))
+      const technicalCriteria = existingCriteria
+        .filter((item) => !['administratif', 'financier'].includes(String(item.category || '').toLowerCase()))
+        .map((item) => ({ ...item, localId: String(item.id) }))
+      setCriteria(technicalCriteria.length ? technicalCriteria : [newTechnicalCriterion()])
+    }).catch((requestError) => {
       setError(requestError.message)
       showToast(requestError.message, 'error')
     })
@@ -71,6 +90,10 @@ export default function CreateTenderPage() {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
     if (error) setError('')
+  }
+
+  const updateCriterion = (localId, key, value) => {
+    setCriteria((current) => current.map((criterion) => criterion.localId === localId ? { ...criterion, [key]: value } : criterion))
   }
 
   const handleFileChange = (event) => {
@@ -127,6 +150,21 @@ export default function CreateTenderPage() {
       document.querySelector('[name="dateLimiteSoumission"]')?.focus()
       return false
     }
+    if (criteria.length === 0) {
+      setError('Ajoutez au moins un critère technique repris du dossier de consultation.')
+      showToast('Ajoutez au moins un critère technique avant de continuer.', 'error')
+      return false
+    }
+    if (criteria.some((criterion) => !String(criterion.label || '').trim())) {
+      setError('Renseignez l’intitulé de chaque critère technique.')
+      showToast('Renseignez l’intitulé de chaque critère technique.', 'error')
+      return false
+    }
+    if (criteria.some((criterion) => !Number.isFinite(Number(criterion.weight)) || Number(criterion.weight) <= 0 || !Number.isFinite(Number(criterion.maxScore)) || Number(criterion.maxScore) <= 0)) {
+      setError('Chaque critère doit avoir un poids et une note maximale supérieurs à zéro.')
+      showToast('Vérifiez le poids et la note maximale des critères.', 'error')
+      return false
+    }
     return true
   }
 
@@ -142,7 +180,23 @@ export default function CreateTenderPage() {
         typeMarche: form.typeMarche,
         dateLimiteSoumission: new Date(form.dateLimiteSoumission).toISOString(),
       }
-      const tender = isEditing ? await tenderService.update(id, payload) : await tenderService.create(payload)
+      const tenderId = id || createdTenderId
+      const tender = tenderId ? await tenderService.update(tenderId, payload) : await tenderService.create(payload)
+      setCreatedTenderId(tender.id)
+
+      const pendingCriteria = criteria.filter((criterion) => !criterion.id)
+      for (const criterion of pendingCriteria) {
+        const savedCriterion = await tenderService.createCriteria(tender.id, {
+          label: criterion.label.trim(),
+          description: String(criterion.description || '').trim(),
+          weight: Number(criterion.weight),
+          maxScore: Number(criterion.maxScore),
+          category: 'technique',
+        })
+        setCriteria((current) => current.map((item) => item.localId === criterion.localId
+          ? { ...savedCriterion, localId: String(savedCriterion.id) }
+          : item))
+      }
 
       if (file && tender?.id) {
         try {
@@ -153,7 +207,7 @@ export default function CreateTenderPage() {
         }
       }
 
-      showToast(isEditing ? 'Le marché a été mis à jour avec succès !' : 'Marché public créé et enregistré avec succès !')
+      showToast(isEditing || tenderId ? 'Le marché et sa grille technique ont été enregistrés.' : 'Marché et grille technique enregistrés avec succès !')
       navigate(`/app/appels-offres/${tender.id}`)
     } catch (requestError) {
       console.error('Erreur enregistrement marché :', requestError)
@@ -177,7 +231,7 @@ export default function CreateTenderPage() {
       <header className="authority-page-head">
         <div>
           <h1>{isEditing ? 'Modifier le Marché Public' : 'Nouveau Marché Public'}</h1>
-          <p>Configurez les paramètres de votre appel d’offres. Vous pourrez ensuite le publier, ouvrir les offres reçues et les évaluer.</p>
+          <p>Configurez le marché et sa grille d’évaluation avant publication. La commission pourra ensuite noter les offres selon les critères annoncés.</p>
         </div>
         <div className="authority-page-head__actions">
           <button className="authority-btn authority-btn--ghost" disabled={loading} onClick={executeSave} type="button">
@@ -243,6 +297,41 @@ export default function CreateTenderPage() {
           <label className="authority-field authority-field--full">Description du besoin
             <textarea name="description" value={form.description} onChange={update} rows="6" placeholder="Décrivez les objectifs, le contexte technique et les exigences du marché..." required />
           </label>
+        </section>
+
+        <section className="authority-criteria-card">
+          <header>
+            <div>
+              <h2><FileSearch size={17} /> Grille d’évaluation technique</h2>
+              <p>Recopiez les critères, poids et notes maximales du dossier de consultation avant de publier le marché.</p>
+            </div>
+            <button className="authority-btn authority-btn--ghost" onClick={() => setCriteria((current) => [...current, newTechnicalCriterion()])} type="button">
+              <Plus size={14} /> Ajouter un critère
+            </button>
+          </header>
+          <div className="authority-criteria-list">
+            {criteria.map((criterion, index) => (
+              <article className="authority-criteria-row" key={criterion.localId}>
+                <div className="authority-criteria-row__heading"><b>Critère {index + 1}</b>{criterion.id && <span>Enregistré</span>}</div>
+                <label className="authority-field">Intitulé du critère
+                  <input disabled={Boolean(criterion.id)} value={criterion.label} onChange={(event) => updateCriterion(criterion.localId, 'label', event.target.value)} placeholder="Ex. Méthodologie d’exécution" required />
+                </label>
+                <label className="authority-field">Description et éléments attendus
+                  <textarea disabled={Boolean(criterion.id)} value={criterion.description || ''} onChange={(event) => updateCriterion(criterion.localId, 'description', event.target.value)} rows={2} placeholder="Reprenez les exigences du dossier de consultation." />
+                </label>
+                <div className="authority-criteria-row__numbers">
+                  <label className="authority-field">Poids relatif
+                    <input disabled={Boolean(criterion.id)} type="number" min="0.1" step="0.1" value={criterion.weight} onChange={(event) => updateCriterion(criterion.localId, 'weight', event.target.value)} placeholder="Ex. 30" required />
+                  </label>
+                  <label className="authority-field">Note maximale
+                    <input disabled={Boolean(criterion.id)} type="number" min="0.1" step="0.1" value={criterion.maxScore} onChange={(event) => updateCriterion(criterion.localId, 'maxScore', event.target.value)} required />
+                  </label>
+                  {!criterion.id && <button className="authority-criteria-row__remove" aria-label={`Supprimer le critère ${index + 1}`} onClick={() => setCriteria((current) => current.filter((item) => item.localId !== criterion.localId))} type="button"><Trash2 size={15} /></button>}
+                </div>
+              </article>
+            ))}
+          </div>
+          <small className="authority-criteria-card__note">Le poids sert à comparer les critères techniques entre eux. Une fois le marché publié, la grille ne doit plus être modifiée.</small>
         </section>
 
         <section className="authority-upload-card">
